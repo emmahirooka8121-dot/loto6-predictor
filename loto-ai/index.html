@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ロトAI Ω∞ AUTONOMOUS</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>ロトAI Ω∞</h1>
+<p class="subtitle">AUTONOMOUS PREDICTION SYSTEM</p>
+
+<!-- Scheduler Status -->
+<div class="scheduler-bar" id="schedulerStatus">
+  <span class="sched-dot waiting"></span> INITIALIZING...
+</div>
+
+<!-- Target Date -->
+<div class="date-card">
+  <div class="date-label">Prediction Target Date</div>
+  <div class="date-value" id="targetDate">----------</div>
+  <div class="gen-mode manual" id="genMode">READY</div>
+</div>
+
+<!-- Predictions -->
+<div class="predictions" id="predictions"></div>
+
+<!-- Timestamp -->
+<div class="gen-timestamp" id="genTimestamp"></div>
+
+<!-- Buttons -->
+<div class="btn-row">
+  <button class="btn-generate" id="btnGenerate">Generate Prediction</button>
+  <button class="btn-deep" id="btnDeep">AI SEARCH</button>
+</div>
+
+<!-- Algorithms -->
+<div class="algo-info">
+  <div class="algo-title">AI Algorithms</div>
+  <div class="algo-list">
+    <span class="algo-tag">Monte Carlo 100K</span>
+    <span class="algo-tag">Genetic Algorithm</span>
+    <span class="algo-tag">Frequency Analysis</span>
+    <span class="algo-tag">Entropy Optimization</span>
+    <span class="algo-tag">Human Bias Model</span>
+    <span class="algo-tag">Portfolio Optimization</span>
+  </div>
+</div>
+
+<!-- History -->
+<div class="history-section">
+  <button class="history-toggle" id="historyToggle">Prediction History</button>
+  <div class="history-panel" id="historyPanel"></div>
+</div>
+
+<footer>ロトAI Ω∞ AUTONOMOUS &mdash; AI-Powered Loto6 Prediction</footer>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">AI SEARCHING...</div>
+</div>
+
+<!-- Scripts (order matters: engine → scheduler → ai → init) -->
+<script src="ai-engine.js"></script>
+<script src="scheduler.js"></script>
+<script src="ai.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // Set initial target date
+  var nextDraw = Scheduler.getNextDrawDate();
+  document.getElementById("targetDate").textContent = Scheduler.formatDate(nextDraw);
+
+  // Manual generate
+  document.getElementById("btnGenerate").addEventListener("click", function () {
+    var result = LotoAI.generate("manual");
+    LotoAI.renderPredictions(result);
+  });
+
+  // Deep AI search
+  document.getElementById("btnDeep").addEventListener("click", function () {
+    var overlay = document.getElementById("loadingOverlay");
+    overlay.classList.add("active");
+
+    setTimeout(function () {
+      var result = LotoAI.generate("deep");
+      LotoAI.renderPredictions(result);
+      overlay.classList.remove("active");
+    }, 100);
+  });
+
+  // History toggle
+  document.getElementById("historyToggle").addEventListener("click", function () {
+    var panel = document.getElementById("historyPanel");
+    panel.classList.toggle("open");
+    if (panel.classList.contains("open")) {
+      LotoAI.renderHistory();
+    }
+  });
+
+  // Start scheduler (auto-generate on day before draw at 12:00)
+  Scheduler.start(function () {
+    var result = LotoAI.generate("auto");
+    LotoAI.renderPredictions(result);
+  });
+
+  // Initial prediction
+  var initial = LotoAI.generate("manual");
+  LotoAI.renderPredictions(initial);
+})();
+</script>
+</body>
+</html>
