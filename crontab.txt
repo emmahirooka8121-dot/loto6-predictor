@@ -1,0 +1,13 @@
+# Loto6 Predictor - cron設定例
+#
+# 以下を crontab -e で追加してください。
+# /path/to/loto6-predictor はプロジェクトの絶対パスに置き換えてください。
+
+# 抽選前日（日曜・水曜）の正午に予想生成
+0 12 * * 0,3 cd /path/to/loto6-predictor && /usr/bin/python3 -m src.main run-scheduled >> logs/cron.log 2>&1
+
+# 抽選当日（月曜・木曜）の20:30に結果取得＋検証
+30 20 * * 1,4 cd /path/to/loto6-predictor && /usr/bin/python3 -m src.main verify >> logs/cron.log 2>&1
+
+# 月初に重みの自動調整
+0 9 1 * * cd /path/to/loto6-predictor && /usr/bin/python3 -m src.main tune >> logs/cron.log 2>&1
