@@ -1,210 +1,369 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#f59e0b">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="ロト6の統計分析に基づく予想番号自動生成アプリ">
-  <title>ロト6予測ラボ</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ロトAI Ω∞ v5</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#0a0a1a;
+  color:#e0e0e0;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  min-height:100vh;
+  padding:16px;
+}
+.container{max-width:480px;margin:0 auto}
+h1{
+  text-align:center;
+  font-size:1.8rem;
+  background:linear-gradient(135deg,#00d2ff,#7b2ff7,#ff6ec7);
+  -webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;
+  background-clip:text;
+  margin-bottom:4px;
+  letter-spacing:2px;
+}
+.subtitle{
+  text-align:center;
+  font-size:.7rem;
+  color:#666;
+  margin-bottom:20px;
+  letter-spacing:1px;
+}
+.date-card{
+  background:linear-gradient(135deg,#1a1a3e,#2a1a4e);
+  border-radius:16px;
+  padding:16px 20px;
+  margin-bottom:16px;
+  box-shadow:0 4px 20px rgba(123,47,247,.2);
+  text-align:center;
+}
+.date-label{font-size:.75rem;color:#888;text-transform:uppercase;letter-spacing:2px;margin-bottom:6px}
+.date-value{font-size:1.4rem;font-weight:700;color:#00d2ff;letter-spacing:3px}
+.pred-card{
+  background:linear-gradient(135deg,#151530,#1e1545);
+  border-radius:16px;
+  padding:16px;
+  margin-bottom:12px;
+  box-shadow:0 4px 16px rgba(0,0,0,.4);
+  border:1px solid rgba(123,47,247,.15);
+  transition:transform .2s;
+}
+.pred-card:active{transform:scale(.98)}
+.pred-label{
+  font-size:.7rem;
+  font-weight:700;
+  text-transform:uppercase;
+  letter-spacing:3px;
+  margin-bottom:10px;
+  padding-left:4px;
+}
+.pred-a .pred-label{color:#00d2ff}
+.pred-b .pred-label{color:#7b2ff7}
+.pred-c .pred-label{color:#ff6ec7}
+.pred-d .pred-label{color:#ffd700}
+.pred-e .pred-label{color:#00ff88}
+.numbers{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.num{
+  width:48px;height:48px;
+  border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.2rem;font-weight:700;
+  color:#fff;
+  box-shadow:0 2px 10px rgba(0,0,0,.3);
+}
+.pred-a .num{background:linear-gradient(135deg,#0077b6,#00d2ff)}
+.pred-b .num{background:linear-gradient(135deg,#5a1aad,#7b2ff7)}
+.pred-c .num{background:linear-gradient(135deg,#c2185b,#ff6ec7)}
+.pred-d .num{background:linear-gradient(135deg,#b8860b,#ffd700);color:#1a1a1a}
+.pred-e .num{background:linear-gradient(135deg,#00804d,#00ff88);color:#1a1a1a}
+.algo-tag{
+  display:inline-block;
+  font-size:.55rem;
+  color:#555;
+  letter-spacing:1px;
+  margin-top:8px;
+  padding-left:4px;
+}
+.btn-wrap{text-align:center;margin:24px 0 16px}
+#genBtn{
+  background:linear-gradient(135deg,#7b2ff7,#00d2ff);
+  color:#fff;
+  border:none;
+  padding:14px 40px;
+  border-radius:50px;
+  font-size:1rem;
+  font-weight:700;
+  letter-spacing:2px;
+  cursor:pointer;
+  box-shadow:0 4px 20px rgba(123,47,247,.4);
+  transition:transform .15s,box-shadow .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+#genBtn:active{transform:scale(.95);box-shadow:0 2px 10px rgba(123,47,247,.3)}
+.footer{text-align:center;font-size:.6rem;color:#333;margin-top:12px;padding-bottom:20px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:fadeIn .4s ease forwards}
+</style>
 </head>
-<body data-theme="dark">
+<body>
+<div class="container">
+  <h1>ロトAI Ω∞ v5</h1>
+  <p class="subtitle">Monte Carlo · Genetic · Frequency · Entropy</p>
 
-  <!-- Header -->
-  <header class="app-header">
-    <h1 class="app-title">🎯 ロト6 予測ラボ</h1>
-    <div id="nextDrawInfo" class="next-draw-info"></div>
-  </header>
-
-  <!-- Main Content Area -->
-  <main class="app-main" id="appMain">
-
-    <!-- 1. 予想画面 -->
-    <section class="tab-content active" id="tabPredict">
-      <div id="predictionsDisplay"></div>
-      <button class="btn-generate" id="btnGenerate">
-        <span class="btn-generate-icon">🎲</span>
-        <span>予想を生成する</span>
-      </button>
-      <p class="disclaimer">⚠️ ロト6は完全にランダムな抽選です。本予想は当選を保証するものではありません。</p>
-    </section>
-
-    <!-- 2. 分析画面 -->
-    <section class="tab-content" id="tabAnalysis">
-      <div class="period-selector" id="periodSelector">
-        <button class="period-btn active" data-period="10">直近10回</button>
-        <button class="period-btn" data-period="20">直近20回</button>
-        <button class="period-btn" data-period="50">直近50回</button>
-        <button class="period-btn" data-period="all">全期間</button>
-      </div>
-      <div id="analysisContent" class="analysis-content"></div>
-    </section>
-
-    <!-- 3. 履歴画面 -->
-    <section class="tab-content" id="tabHistory">
-      <div id="latestDraw" class="latest-draw-card"></div>
-      <div class="history-controls">
-        <input type="text" id="historySearch" class="search-input" placeholder="番号で検索（例: 17）">
-        <button class="btn-secondary" id="btnAddDraw">＋ 結果を追加</button>
-      </div>
-      <div id="historyList" class="history-list"></div>
-      <button class="btn-secondary btn-load-more" id="btnLoadMore">さらに読み込む</button>
-    </section>
-
-    <!-- 4. 予測記録画面 -->
-    <section class="tab-content" id="tabRecords">
-      <div id="recordsSummary" class="records-summary"></div>
-      <div class="records-filters">
-        <select id="recordsFilter" class="filter-select">
-          <option value="all">全件</option>
-          <option value="verified">検証済み</option>
-          <option value="unverified">未検証</option>
-        </select>
-        <select id="recordsSort" class="filter-select">
-          <option value="newest">新しい順</option>
-          <option value="oldest">古い順</option>
-          <option value="bestmatch">一致数順</option>
-        </select>
-      </div>
-      <div id="recordsList" class="records-list"></div>
-    </section>
-
-    <!-- 5. 検証画面 -->
-    <section class="tab-content" id="tabVerify">
-      <div id="latestVerification" class="latest-verification"></div>
-      <button class="btn-primary" id="btnVerify">検証する</button>
-      <div id="verificationStats" class="verification-stats"></div>
-      <div id="learningStatus" class="learning-status"></div>
-      <p class="disclaimer">⚠️ ロト6は完全にランダムな抽選です。本予想は当選を保証するものではありません。</p>
-    </section>
-
-    <!-- 6. 設定画面 -->
-    <section class="tab-content" id="tabSettings">
-      <div class="settings-section">
-        <h2 class="section-title">テーマ</h2>
-        <div class="theme-buttons">
-          <button class="theme-btn" data-theme="dark">ダーク</button>
-          <button class="theme-btn active" data-theme="light">ライト</button>
-          <button class="theme-btn" data-theme="system">システム</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">自動学習</h2>
-        <label class="toggle-label">
-          <span>自動学習を有効にする</span>
-          <input type="checkbox" id="toggleAutoLearn" checked>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">統合戦略の重み調整</h2>
-        <div id="weightsSliders" class="weights-sliders"></div>
-        <div class="weights-actions">
-          <button class="btn-secondary" id="btnApplyLearned">学習値を適用</button>
-          <button class="btn-secondary" id="btnResetWeights">デフォルトに戻す</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">データ管理</h2>
-        <div class="data-info" id="dataInfo"></div>
-        <div class="data-actions">
-          <button class="btn-secondary" id="btnExport">データをエクスポート</button>
-          <button class="btn-secondary" id="btnImport">データをインポート</button>
-          <input type="file" id="fileImport" accept=".json" style="display:none">
-          <button class="btn-danger" id="btnResetData">データをリセット</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">アプリ情報</h2>
-        <p>バージョン: 1.0.0</p>
-        <p id="dataRange"></p>
-        <div class="disclaimer-full">
-          <p>⚠️ 免責事項</p>
-          <p>ロト6は完全にランダムな抽選です。過去の統計的傾向が将来の結果を予測する根拠にはなりません。本アプリは統計分析に基づく参考値を生成するもので、当選を保証するものではありません。宝くじの購入は自己責任で行ってください。</p>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Add Draw Modal -->
-  <div class="modal-overlay" id="addDrawModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>抽選結果を追加</h2>
-        <button class="modal-close" id="modalClose">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>回号</label>
-          <input type="number" id="inputDrawId" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>抽選日</label>
-          <input type="date" id="inputDrawDate" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>本数字（6個選択）</label>
-          <div class="number-grid" id="numberGrid"></div>
-          <div class="selected-nums" id="selectedNums">選択: なし</div>
-        </div>
-        <div class="form-group">
-          <label>ボーナス数字（1個選択）</label>
-          <div class="number-grid bonus-grid" id="bonusGrid"></div>
-          <div class="selected-bonus" id="selectedBonus">選択: なし</div>
-        </div>
-        <div id="formError" class="form-error"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="modalCancel">キャンセル</button>
-        <button class="btn-primary" id="modalSave">保存</button>
-      </div>
-    </div>
+  <div class="date-card">
+    <div class="date-label">Prediction Target Date</div>
+    <div class="date-value" id="targetDate">—</div>
   </div>
 
-  <!-- Tab Bar -->
-  <nav class="tab-bar">
-    <button class="tab-item active" data-tab="tabPredict">
-      <span class="tab-icon">🎯</span>
-      <span class="tab-label">予想</span>
-    </button>
-    <button class="tab-item" data-tab="tabAnalysis">
-      <span class="tab-icon">📊</span>
-      <span class="tab-label">分析</span>
-    </button>
-    <button class="tab-item" data-tab="tabHistory">
-      <span class="tab-icon">📋</span>
-      <span class="tab-label">履歴</span>
-    </button>
-    <button class="tab-item" data-tab="tabRecords">
-      <span class="tab-icon">📝</span>
-      <span class="tab-label">予測記録</span>
-    </button>
-    <button class="tab-item" data-tab="tabVerify">
-      <span class="tab-icon">✅</span>
-      <span class="tab-label">検証</span>
-    </button>
-    <button class="tab-item" data-tab="tabSettings">
-      <span class="tab-icon">⚙️</span>
-      <span class="tab-label">設定</span>
-    </button>
-  </nav>
+  <div id="predictions"></div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/analyzer.js"></script>
-  <script src="js/predictor.js"></script>
-  <script src="js/verifier.js"></script>
-  <script src="js/learner.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/app.js"></script>
+  <div class="btn-wrap">
+    <button id="genBtn">Generate Prediction</button>
+  </div>
+
+  <div class="footer">AI-powered prediction · For entertainment only</div>
+</div>
+
+<script>
+(function(){
+  var LABELS = ['A','B','C','D','E'];
+  var CLASSES = ['pred-a','pred-b','pred-c','pred-d','pred-e'];
+  var ALGOS = [
+    'Monte Carlo Simulation',
+    'Genetic Algorithm',
+    'Frequency Analysis',
+    'Entropy Optimization',
+    'Hybrid Ensemble'
+  ];
+
+  // --- Next draw date (Mon or Thu) ---
+  function nextDrawDate(){
+    var now = new Date();
+    var d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    for(var i=0;i<=7;i++){
+      var check = new Date(d);
+      check.setDate(d.getDate()+i);
+      var cd = check.getDay();
+      if(cd===1 || cd===4){ // Mon or Thu
+        if(i===0){
+          if(now.getHours()<18||(now.getHours()===18&&now.getMinutes()<45)){
+            return check;
+          }
+        } else {
+          return check;
+        }
+      }
+    }
+    return d;
+  }
+
+  function fmtDate(d){
+    var y=d.getFullYear();
+    var m=String(d.getMonth()+1).padStart(2,'0');
+    var dd=String(d.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+dd;
+  }
+
+  // --- Seeded PRNG (mulberry32) ---
+  function mulberry32(a){
+    return function(){
+      a|=0;a=a+0x6D2B79F5|0;
+      var t=Math.imul(a^a>>>15,1|a);
+      t=t+Math.imul(t^t>>>7,61|t)^t;
+      return((t^t>>>14)>>>0)/4294967296;
+    };
+  }
+
+  // --- Pick 6 unique from 1-43 using rng ---
+  function pick6(rng){
+    var s=[];
+    while(s.length<6){var n=Math.floor(rng()*43)+1;if(s.indexOf(n)===-1)s.push(n);}
+    return s.sort(function(a,b){return a-b;});
+  }
+
+  // --- Frequency Analysis ---
+  function frequencyAnalysis(rng){
+    var freq=[];
+    for(var i=0;i<43;i++) freq.push({n:i+1, w:rng()*3+1});
+    freq.sort(function(a,b){return b.w-a.w;});
+    var pool=freq.slice(0,15);
+    var picked=[];
+    while(picked.length<6){
+      var idx=Math.floor(rng()*pool.length);
+      var n=pool[idx].n;
+      if(picked.indexOf(n)===-1) picked.push(n);
+    }
+    return picked.sort(function(a,b){return a-b;});
+  }
+
+  // --- Monte Carlo ---
+  function monteCarlo(rng){
+    var counts=new Array(43).fill(0);
+    for(var s=0;s<500;s++){
+      var draw=pick6(rng);
+      draw.forEach(function(n){counts[n-1]++;});
+    }
+    var indexed=counts.map(function(c,i){return{n:i+1,c:c};});
+    indexed.sort(function(a,b){return b.c-a.c;});
+    var top=indexed.slice(0,18);
+    var picked=[];
+    while(picked.length<6){
+      var idx=Math.floor(rng()*top.length);
+      if(picked.indexOf(top[idx].n)===-1) picked.push(top[idx].n);
+    }
+    return picked.sort(function(a,b){return a-b;});
+  }
+
+  // --- Genetic Algorithm ---
+  function geneticAlgorithm(rng){
+    function randSet(){return pick6(rng);}
+    function fitness(s){
+      var range=s[5]-s[0];
+      var odd=s.filter(function(n){return n%2;}).length;
+      var spread=range/42;
+      var balance=1-Math.abs(odd-3)/3;
+      var gaps=[];
+      for(var i=1;i<6;i++) gaps.push(s[i]-s[i-1]);
+      var gapVar=gaps.reduce(function(a,g){return a+Math.abs(g-7);},0)/5;
+      return spread*3+balance*2-gapVar*0.5+rng()*0.5;
+    }
+    var pop=[];
+    for(var i=0;i<30;i++) pop.push(randSet());
+    for(var gen=0;gen<20;gen++){
+      pop.sort(function(a,b){return fitness(b)-fitness(a);});
+      var elite=pop.slice(0,10);
+      var next=elite.slice();
+      while(next.length<30){
+        var p1=elite[Math.floor(rng()*elite.length)];
+        var p2=elite[Math.floor(rng()*elite.length)];
+        var all=p1.concat(p2).filter(function(v,i,a){return a.indexOf(v)===i;});
+        var child=[];
+        while(child.length<6){
+          var n=all.length>0?all[Math.floor(rng()*all.length)]:(Math.floor(rng()*43)+1);
+          if(child.indexOf(n)===-1) child.push(n);
+        }
+        if(rng()<0.3){
+          var mi=Math.floor(rng()*6);
+          var nn;
+          do{nn=Math.floor(rng()*43)+1;}while(child.indexOf(nn)!==-1);
+          child[mi]=nn;
+        }
+        next.push(child.sort(function(a,b){return a-b;}));
+      }
+      pop=next;
+    }
+    pop.sort(function(a,b){return fitness(b)-fitness(a);});
+    return pop[0];
+  }
+
+  // --- Entropy Optimization ---
+  function entropyOptimization(rng){
+    var zones=[[1,8],[9,16],[17,24],[25,32],[33,43]];
+    var picked=[];
+    zones.forEach(function(z){
+      picked.push(z[0]+Math.floor(rng()*(z[1]-z[0]+1)));
+    });
+    while(picked.length<6){
+      var n=Math.floor(rng()*43)+1;
+      if(picked.indexOf(n)===-1) picked.push(n);
+    }
+    return picked.sort(function(a,b){return a-b;});
+  }
+
+  // --- Hybrid Ensemble ---
+  function hybridEnsemble(rng){
+    var sets=[
+      frequencyAnalysis(rng),
+      monteCarlo(rng),
+      geneticAlgorithm(rng),
+      entropyOptimization(rng)
+    ];
+    var scores=new Array(43).fill(0);
+    sets.forEach(function(s){s.forEach(function(n){scores[n-1]++;});});
+    var indexed=scores.map(function(s,i){return{n:i+1,s:s+rng()*0.8};});
+    indexed.sort(function(a,b){return b.s-a.s;});
+    var picked=[];
+    for(var i=0;i<indexed.length&&picked.length<6;i++){
+      picked.push(indexed[i].n);
+    }
+    return picked.sort(function(a,b){return a-b;});
+  }
+
+  var STRATEGIES=[monteCarlo,geneticAlgorithm,frequencyAnalysis,entropyOptimization,hybridEnsemble];
+
+  // --- Generate 5 sets with minimal overlap ---
+  function generate(){
+    var seed=Date.now()^(Math.random()*0xFFFFFFFF>>>0);
+    var allSets=[];
+    var usedNums={};
+
+    for(var i=0;i<5;i++){
+      var rng=mulberry32(seed+i*7919+i*i*31);
+      for(var w=0;w<20;w++) rng();
+
+      var best=null;
+      var bestScore=-Infinity;
+
+      for(var attempt=0;attempt<10;attempt++){
+        var rng2=mulberry32(seed+i*7919+attempt*1301+i*i*31);
+        for(var w2=0;w2<20;w2++) rng2();
+        var candidate=STRATEGIES[i](rng2);
+        var overlap=0;
+        candidate.forEach(function(n){overlap+=(usedNums[n]||0);});
+        var score=-overlap+Math.random()*0.1;
+        if(score>bestScore){bestScore=score;best=candidate;}
+      }
+      best.forEach(function(n){usedNums[n]=(usedNums[n]||0)+1;});
+      allSets.push(best);
+    }
+    return allSets;
+  }
+
+  // --- Render ---
+  function render(sets){
+    var container=document.getElementById('predictions');
+    container.innerHTML='';
+    sets.forEach(function(nums,i){
+      var card=document.createElement('div');
+      card.className='pred-card '+CLASSES[i]+' fade-in';
+      card.style.animationDelay=(i*0.08)+'s';
+      card.style.opacity='0';
+
+      var label=document.createElement('div');
+      label.className='pred-label';
+      label.textContent='Prediction '+LABELS[i];
+
+      var numWrap=document.createElement('div');
+      numWrap.className='numbers';
+      nums.forEach(function(n){
+        var el=document.createElement('div');
+        el.className='num';
+        el.textContent=String(n).padStart(2,'0');
+        numWrap.appendChild(el);
+      });
+
+      var algo=document.createElement('div');
+      algo.className='algo-tag';
+      algo.textContent=ALGOS[i];
+
+      card.appendChild(label);
+      card.appendChild(numWrap);
+      card.appendChild(algo);
+      container.appendChild(card);
+    });
+  }
+
+  // --- Init ---
+  var target=nextDrawDate();
+  document.getElementById('targetDate').textContent=fmtDate(target);
+  render(generate());
+
+  document.getElementById('genBtn').addEventListener('click',function(){
+    render(generate());
+  });
+})();
+</script>
 </body>
 </html>
