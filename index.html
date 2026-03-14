@@ -1,210 +1,304 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#f59e0b">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="ロト6の統計分析に基づく予想番号自動生成アプリ">
-  <title>ロト6予測ラボ</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ロトAI Ω∞</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{background:#111;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Hiragino Sans',sans-serif;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:16px;line-height:1.6}
+h1{font-size:2rem;letter-spacing:.12em;text-align:center;margin:24px 0 4px;background:linear-gradient(135deg,#00e5ff,#aa00ff,#ff1744);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{font-size:.75rem;color:#888;text-align:center;margin-bottom:24px;letter-spacing:.15em}
+.date-card{background:#1a1a2e;border-radius:14px;padding:16px 24px;text-align:center;margin-bottom:28px;box-shadow:0 4px 20px rgba(0,0,0,.4);width:100%;max-width:420px}
+.date-label{font-size:.7rem;color:#aaa;letter-spacing:.18em;text-transform:uppercase;margin-bottom:4px}
+.date-value{font-size:1.35rem;font-weight:700;letter-spacing:.08em;color:#00e5ff}
+.predictions{width:100%;max-width:420px;display:flex;flex-direction:column;gap:16px;margin-bottom:28px}
+.pred-card{background:linear-gradient(145deg,#1a1a2e,#16213e);border-radius:16px;padding:16px;box-shadow:0 4px 24px rgba(0,0,0,.5);opacity:0;transform:translateY(20px);animation:fadeUp .5s forwards}
+.pred-card:nth-child(1){animation-delay:.05s}
+.pred-card:nth-child(2){animation-delay:.12s}
+.pred-card:nth-child(3){animation-delay:.19s}
+.pred-card:nth-child(4){animation-delay:.26s}
+.pred-card:nth-child(5){animation-delay:.33s}
+@keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+.pred-label{font-size:.7rem;color:#aaa;letter-spacing:.2em;margin-bottom:10px;text-transform:uppercase}
+.numbers{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.num-ball{aspect-ratio:1;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.05rem;font-weight:700;color:#fff;background:linear-gradient(135deg,#6a11cb,#2575fc);box-shadow:0 2px 10px rgba(37,117,252,.35);transition:transform .2s}
+.num-ball:hover{transform:scale(1.15)}
+.num-ball.high{background:linear-gradient(135deg,#f857a6,#ff5858)}
+.btn-wrap{width:100%;max-width:420px;margin-bottom:32px}
+.btn-generate{width:100%;padding:16px;border:none;border-radius:14px;font-size:1rem;font-weight:700;letter-spacing:.1em;color:#fff;background:linear-gradient(135deg,#6a11cb,#2575fc);cursor:pointer;box-shadow:0 4px 20px rgba(37,117,252,.3);transition:transform .15s,box-shadow .15s;-webkit-tap-highlight-color:transparent}
+.btn-generate:active{transform:scale(.97);box-shadow:0 2px 10px rgba(37,117,252,.2)}
+.algo-info{width:100%;max-width:420px;background:#1a1a2e;border-radius:14px;padding:16px;margin-bottom:24px;box-shadow:0 4px 20px rgba(0,0,0,.4)}
+.algo-title{font-size:.65rem;color:#888;letter-spacing:.18em;text-transform:uppercase;margin-bottom:8px}
+.algo-list{display:flex;flex-wrap:wrap;gap:6px}
+.algo-tag{font-size:.6rem;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,.07);color:#bbb;letter-spacing:.06em}
+footer{margin-top:auto;padding:16px 0 8px;text-align:center;font-size:.6rem;color:#555;letter-spacing:.1em}
+</style>
 </head>
-<body data-theme="dark">
+<body>
 
-  <!-- Header -->
-  <header class="app-header">
-    <h1 class="app-title">🎯 ロト6 予測ラボ</h1>
-    <div id="nextDrawInfo" class="next-draw-info"></div>
-  </header>
+<h1>ロトAI Ω∞</h1>
+<p class="subtitle">LOTO6 AI PREDICTION ENGINE</p>
 
-  <!-- Main Content Area -->
-  <main class="app-main" id="appMain">
+<div class="date-card">
+  <div class="date-label">Prediction Target Date</div>
+  <div class="date-value" id="targetDate">----------</div>
+</div>
 
-    <!-- 1. 予想画面 -->
-    <section class="tab-content active" id="tabPredict">
-      <div id="predictionsDisplay"></div>
-      <button class="btn-generate" id="btnGenerate">
-        <span class="btn-generate-icon">🎲</span>
-        <span>予想を生成する</span>
-      </button>
-      <p class="disclaimer">⚠️ ロト6は完全にランダムな抽選です。本予想は当選を保証するものではありません。</p>
-    </section>
+<div class="predictions" id="predictions"></div>
 
-    <!-- 2. 分析画面 -->
-    <section class="tab-content" id="tabAnalysis">
-      <div class="period-selector" id="periodSelector">
-        <button class="period-btn active" data-period="10">直近10回</button>
-        <button class="period-btn" data-period="20">直近20回</button>
-        <button class="period-btn" data-period="50">直近50回</button>
-        <button class="period-btn" data-period="all">全期間</button>
-      </div>
-      <div id="analysisContent" class="analysis-content"></div>
-    </section>
+<div class="btn-wrap">
+  <button class="btn-generate" id="btnGenerate">Generate Prediction</button>
+</div>
 
-    <!-- 3. 履歴画面 -->
-    <section class="tab-content" id="tabHistory">
-      <div id="latestDraw" class="latest-draw-card"></div>
-      <div class="history-controls">
-        <input type="text" id="historySearch" class="search-input" placeholder="番号で検索（例: 17）">
-        <button class="btn-secondary" id="btnAddDraw">＋ 結果を追加</button>
-      </div>
-      <div id="historyList" class="history-list"></div>
-      <button class="btn-secondary btn-load-more" id="btnLoadMore">さらに読み込む</button>
-    </section>
-
-    <!-- 4. 予測記録画面 -->
-    <section class="tab-content" id="tabRecords">
-      <div id="recordsSummary" class="records-summary"></div>
-      <div class="records-filters">
-        <select id="recordsFilter" class="filter-select">
-          <option value="all">全件</option>
-          <option value="verified">検証済み</option>
-          <option value="unverified">未検証</option>
-        </select>
-        <select id="recordsSort" class="filter-select">
-          <option value="newest">新しい順</option>
-          <option value="oldest">古い順</option>
-          <option value="bestmatch">一致数順</option>
-        </select>
-      </div>
-      <div id="recordsList" class="records-list"></div>
-    </section>
-
-    <!-- 5. 検証画面 -->
-    <section class="tab-content" id="tabVerify">
-      <div id="latestVerification" class="latest-verification"></div>
-      <button class="btn-primary" id="btnVerify">検証する</button>
-      <div id="verificationStats" class="verification-stats"></div>
-      <div id="learningStatus" class="learning-status"></div>
-      <p class="disclaimer">⚠️ ロト6は完全にランダムな抽選です。本予想は当選を保証するものではありません。</p>
-    </section>
-
-    <!-- 6. 設定画面 -->
-    <section class="tab-content" id="tabSettings">
-      <div class="settings-section">
-        <h2 class="section-title">テーマ</h2>
-        <div class="theme-buttons">
-          <button class="theme-btn" data-theme="dark">ダーク</button>
-          <button class="theme-btn active" data-theme="light">ライト</button>
-          <button class="theme-btn" data-theme="system">システム</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">自動学習</h2>
-        <label class="toggle-label">
-          <span>自動学習を有効にする</span>
-          <input type="checkbox" id="toggleAutoLearn" checked>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">統合戦略の重み調整</h2>
-        <div id="weightsSliders" class="weights-sliders"></div>
-        <div class="weights-actions">
-          <button class="btn-secondary" id="btnApplyLearned">学習値を適用</button>
-          <button class="btn-secondary" id="btnResetWeights">デフォルトに戻す</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">データ管理</h2>
-        <div class="data-info" id="dataInfo"></div>
-        <div class="data-actions">
-          <button class="btn-secondary" id="btnExport">データをエクスポート</button>
-          <button class="btn-secondary" id="btnImport">データをインポート</button>
-          <input type="file" id="fileImport" accept=".json" style="display:none">
-          <button class="btn-danger" id="btnResetData">データをリセット</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">アプリ情報</h2>
-        <p>バージョン: 1.0.0</p>
-        <p id="dataRange"></p>
-        <div class="disclaimer-full">
-          <p>⚠️ 免責事項</p>
-          <p>ロト6は完全にランダムな抽選です。過去の統計的傾向が将来の結果を予測する根拠にはなりません。本アプリは統計分析に基づく参考値を生成するもので、当選を保証するものではありません。宝くじの購入は自己責任で行ってください。</p>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Add Draw Modal -->
-  <div class="modal-overlay" id="addDrawModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>抽選結果を追加</h2>
-        <button class="modal-close" id="modalClose">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>回号</label>
-          <input type="number" id="inputDrawId" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>抽選日</label>
-          <input type="date" id="inputDrawDate" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>本数字（6個選択）</label>
-          <div class="number-grid" id="numberGrid"></div>
-          <div class="selected-nums" id="selectedNums">選択: なし</div>
-        </div>
-        <div class="form-group">
-          <label>ボーナス数字（1個選択）</label>
-          <div class="number-grid bonus-grid" id="bonusGrid"></div>
-          <div class="selected-bonus" id="selectedBonus">選択: なし</div>
-        </div>
-        <div id="formError" class="form-error"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="modalCancel">キャンセル</button>
-        <button class="btn-primary" id="modalSave">保存</button>
-      </div>
-    </div>
+<div class="algo-info">
+  <div class="algo-title">Algorithms</div>
+  <div class="algo-list">
+    <span class="algo-tag">Monte Carlo Simulation</span>
+    <span class="algo-tag">Genetic Algorithm</span>
+    <span class="algo-tag">Frequency Analysis</span>
+    <span class="algo-tag">Entropy Optimization</span>
+    <span class="algo-tag">Human Bias Model</span>
+    <span class="algo-tag">Portfolio Theory</span>
   </div>
+</div>
 
-  <!-- Tab Bar -->
-  <nav class="tab-bar">
-    <button class="tab-item active" data-tab="tabPredict">
-      <span class="tab-icon">🎯</span>
-      <span class="tab-label">予想</span>
-    </button>
-    <button class="tab-item" data-tab="tabAnalysis">
-      <span class="tab-icon">📊</span>
-      <span class="tab-label">分析</span>
-    </button>
-    <button class="tab-item" data-tab="tabHistory">
-      <span class="tab-icon">📋</span>
-      <span class="tab-label">履歴</span>
-    </button>
-    <button class="tab-item" data-tab="tabRecords">
-      <span class="tab-icon">📝</span>
-      <span class="tab-label">予測記録</span>
-    </button>
-    <button class="tab-item" data-tab="tabVerify">
-      <span class="tab-icon">✅</span>
-      <span class="tab-label">検証</span>
-    </button>
-    <button class="tab-item" data-tab="tabSettings">
-      <span class="tab-icon">⚙️</span>
-      <span class="tab-label">設定</span>
-    </button>
-  </nav>
+<footer>ロトAI Ω∞ &mdash; AI-Powered Prediction</footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/analyzer.js"></script>
-  <script src="js/predictor.js"></script>
-  <script src="js/verifier.js"></script>
-  <script src="js/learner.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/app.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var TOTAL=43,PICK=6,SETS=5;
+  var LABELS=["A","B","C","D","E"];
+
+  /* --- Next Draw Date --- */
+  function nextDrawDate(){
+    var now=new Date();
+    var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    /* Loto6: Monday(1) and Thursday(4) */
+    var drawDays=[1,4];
+    for(var d=1;d<=7;d++){
+      var candidate=new Date(today.getTime()+d*864e5);
+      if(drawDays.indexOf(candidate.getDay())!==-1) return candidate;
+    }
+    return today;
+  }
+
+  function fmtDate(d){
+    var y=d.getFullYear();
+    var m=String(d.getMonth()+1).padStart(2,"0");
+    var dd=String(d.getDate()).padStart(2,"0");
+    return y+"-"+m+"-"+dd;
+  }
+
+  document.getElementById("targetDate").textContent=fmtDate(nextDrawDate());
+
+  /* --- Frequency Analysis --- */
+  function buildFrequency(seed){
+    var freq=new Array(TOTAL+1).fill(0);
+    var s=seed;
+    for(var round=0;round<300;round++){
+      var drawn=[];
+      while(drawn.length<PICK){
+        s=(s*1103515245+12345)&0x7fffffff;
+        var n=(s%TOTAL)+1;
+        if(drawn.indexOf(n)===-1) drawn.push(n);
+      }
+      for(var k=0;k<drawn.length;k++) freq[drawn[k]]++;
+    }
+    return freq;
+  }
+
+  /* --- Entropy of a set --- */
+  function entropy(nums){
+    var sum=0;
+    for(var i=0;i<nums.length;i++) sum+=nums[i];
+    var e=0;
+    for(var i=0;i<nums.length;i++){
+      var p=nums[i]/sum;
+      if(p>0) e-=p*Math.log2(p);
+    }
+    return e;
+  }
+
+  /* --- Sum of set --- */
+  function setSum(nums){
+    var s=0;for(var i=0;i<nums.length;i++)s+=nums[i];return s;
+  }
+
+  /* --- Odd/Even balance score --- */
+  function oddEvenBalance(nums){
+    var odd=0;
+    for(var i=0;i<nums.length;i++) if(nums[i]%2===1) odd++;
+    return 1-Math.abs(odd-3)/3;
+  }
+
+  /* --- Generate random set --- */
+  function randomSet(){
+    var s=[];
+    while(s.length<PICK){
+      var n=Math.floor(Math.random()*TOTAL)+1;
+      if(s.indexOf(n)===-1) s.push(n);
+    }
+    s.sort(function(a,b){return a-b});
+    return s;
+  }
+
+  /* --- Monte Carlo: generate many, pick best by score --- */
+  function monteCarlo(freq,iterations){
+    var best=null,bestScore=-1;
+    for(var i=0;i<iterations;i++){
+      var s=randomSet();
+      var freqScore=0;
+      for(var j=0;j<s.length;j++) freqScore+=freq[s[j]];
+      var ent=entropy(s);
+      var oeb=oddEvenBalance(s);
+      var sm=setSum(s);
+      var sumScore=1-Math.abs(sm-132)/132;
+      var score=freqScore*0.3+ent*2+oeb*1.5+sumScore*1.2;
+      if(score>bestScore){bestScore=score;best=s}
+    }
+    return best;
+  }
+
+  /* --- Genetic Algorithm --- */
+  function geneticAlgorithm(freq){
+    var POP=60,GENS=40,MUTRATE=0.15;
+    var pop=[];
+    for(var i=0;i<POP;i++) pop.push(randomSet());
+
+    function fitness(s){
+      var freqScore=0;
+      for(var j=0;j<s.length;j++) freqScore+=freq[s[j]];
+      var ent=entropy(s);
+      var oeb=oddEvenBalance(s);
+      var sm=setSum(s);
+      var sumScore=1-Math.abs(sm-132)/132;
+      return freqScore*0.3+ent*2.5+oeb*1.5+sumScore*1;
+    }
+
+    for(var g=0;g<GENS;g++){
+      pop.sort(function(a,b){return fitness(b)-fitness(a)});
+      var next=pop.slice(0,10);
+      while(next.length<POP){
+        var p1=pop[Math.floor(Math.random()*20)];
+        var p2=pop[Math.floor(Math.random()*20)];
+        var pool=[];
+        for(var k=0;k<p1.length;k++) if(pool.indexOf(p1[k])===-1) pool.push(p1[k]);
+        for(var k2=0;k2<p2.length;k2++) if(pool.indexOf(p2[k2])===-1) pool.push(p2[k2]);
+        for(var k3=pool.length-1;k3>0;k3--){var j=Math.floor(Math.random()*(k3+1));var t=pool[k3];pool[k3]=pool[j];pool[j]=t}
+        var child=pool.slice(0,PICK);
+        if(Math.random()<MUTRATE){
+          var idx=Math.floor(Math.random()*PICK);
+          var nn;
+          do{nn=Math.floor(Math.random()*TOTAL)+1}while(child.indexOf(nn)!==-1);
+          child[idx]=nn;
+        }
+        child.sort(function(a,b){return a-b});
+        next.push(child);
+      }
+      pop=next;
+    }
+    pop.sort(function(a,b){return fitness(b)-fitness(a)});
+    return pop[0];
+  }
+
+  /* --- Human Bias Model: include high numbers 32-43 --- */
+  function humanBiasSet(){
+    var s=[];
+    while(s.length<2){
+      var n=Math.floor(Math.random()*12)+32;
+      if(s.indexOf(n)===-1) s.push(n);
+    }
+    while(s.length<PICK){
+      var n2=Math.floor(Math.random()*TOTAL)+1;
+      if(s.indexOf(n2)===-1){
+        var low=0;for(var i=0;i<s.length;i++) if(s[i]<=31) low++;
+        if(n2<=31 && low>=4) continue;
+        s.push(n2);
+      }
+    }
+    s.sort(function(a,b){return a-b});
+    return s;
+  }
+
+  /* --- Portfolio: minimize overlap between sets --- */
+  function overlap(a,b){
+    var c=0;
+    for(var i=0;i<a.length;i++) if(b.indexOf(a[i])!==-1) c++;
+    return c;
+  }
+
+  function generatePortfolio(freq){
+    var portfolio=[];
+    var generators=[
+      function(){return monteCarlo(freq,800)},
+      function(){return geneticAlgorithm(freq)},
+      function(){return humanBiasSet()},
+      function(){return monteCarlo(freq,600)},
+      function(){return geneticAlgorithm(freq)}
+    ];
+
+    for(var i=0;i<SETS;i++){
+      var bestCandidate=null,bestPenalty=Infinity;
+      for(var attempt=0;attempt<30;attempt++){
+        var candidate=generators[i]();
+        var penalty=0;
+        for(var p=0;p<portfolio.length;p++){
+          penalty+=overlap(candidate,portfolio[p])*3;
+        }
+        var ent=entropy(candidate);
+        penalty-=ent*0.5;
+        if(penalty<bestPenalty){bestPenalty=penalty;bestCandidate=candidate}
+      }
+      portfolio.push(bestCandidate);
+    }
+    return portfolio;
+  }
+
+  /* --- Render --- */
+  function render(sets){
+    var container=document.getElementById("predictions");
+    container.innerHTML="";
+    for(var i=0;i<sets.length;i++){
+      var card=document.createElement("div");
+      card.className="pred-card";
+      card.style.animation="none";
+      void card.offsetHeight;
+      card.style.animation="";
+
+      var label=document.createElement("div");
+      label.className="pred-label";
+      label.textContent="Prediction "+LABELS[i];
+      card.appendChild(label);
+
+      var grid=document.createElement("div");
+      grid.className="numbers";
+      for(var j=0;j<sets[i].length;j++){
+        var ball=document.createElement("div");
+        ball.className="num-ball";
+        if(sets[i][j]>=32) ball.classList.add("high");
+        ball.textContent=String(sets[i][j]).padStart(2,"0");
+        grid.appendChild(ball);
+      }
+      card.appendChild(grid);
+      container.appendChild(card);
+    }
+  }
+
+  /* --- Generate --- */
+  function generate(){
+    var seed=Date.now()%1000000;
+    var freq=buildFrequency(seed);
+    var portfolio=generatePortfolio(freq);
+    render(portfolio);
+  }
+
+  document.getElementById("btnGenerate").addEventListener("click",generate);
+
+  generate();
+})();
+</script>
 </body>
 </html>
