@@ -4,38 +4,93 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ロトAI Ω∞ AUTONOMOUS</title>
-<link rel="stylesheet" href="style.css">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #111; color: #fff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 16px 16px 32px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+h1 { font-size: 2.2rem; letter-spacing: 0.12em; text-align: center; margin: 20px 0 2px; background: linear-gradient(135deg, #00e5ff, #aa00ff, #ff1744); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+.subtitle { font-size: 0.7rem; color: #666; text-align: center; margin-bottom: 20px; letter-spacing: 0.2em; text-transform: uppercase; }
+.scheduler-bar { width: 100%; max-width: 440px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; margin-bottom: 16px; background: rgba(255,255,255,0.03); border-radius: 10px; font-size: 0.6rem; letter-spacing: 0.15em; color: #888; text-transform: uppercase; }
+.sched-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.sched-dot.active { background: #00e676; box-shadow: 0 0 8px rgba(0,230,118,0.6); }
+.sched-dot.pending { background: #ffab00; animation: pulse 1s infinite; }
+.sched-dot.waiting { background: #555; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+.date-card { background: #1a1a2e; border-radius: 14px; padding: 16px 24px; text-align: center; margin-bottom: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); width: 100%; max-width: 440px; }
+.date-label { font-size: 0.65rem; color: #aaa; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 4px; }
+.date-value { font-size: 1.4rem; font-weight: 700; letter-spacing: 0.08em; color: #00e5ff; }
+.gen-mode { display: inline-block; font-size: 0.55rem; letter-spacing: 0.15em; padding: 3px 12px; border-radius: 20px; margin-top: 6px; text-transform: uppercase; }
+.gen-mode.manual { background: rgba(255,255,255,0.08); color: #aaa; }
+.gen-mode.auto { background: rgba(0,230,118,0.15); color: #00e676; }
+.gen-mode.deep { background: rgba(170,0,255,0.15); color: #d500f9; }
+.predictions { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 14px; margin: 20px 0; }
+.pred-card { background: linear-gradient(145deg, #1a1a2e, #16213e); border-radius: 16px; padding: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.5); opacity: 0; transform: translateY(20px); animation: fadeUp 0.5s forwards; }
+.pred-card:nth-child(1){animation-delay:.05s} .pred-card:nth-child(2){animation-delay:.12s} .pred-card:nth-child(3){animation-delay:.19s} .pred-card:nth-child(4){animation-delay:.26s} .pred-card:nth-child(5){animation-delay:.33s}
+@keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+.pred-label { font-size: 0.65rem; color: #aaa; letter-spacing: 0.22em; margin-bottom: 10px; text-transform: uppercase; }
+.numbers { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.num-ball { aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.05rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #6a11cb, #2575fc); box-shadow: 0 2px 12px rgba(37,117,252,0.35); transition: transform 0.2s ease; }
+.num-ball:hover { transform: scale(1.15); }
+.num-ball.high { background: linear-gradient(135deg, #f857a6, #ff5858); box-shadow: 0 2px 12px rgba(248,87,166,0.35); }
+.btn-row { width: 100%; max-width: 440px; display: flex; gap: 10px; margin-bottom: 20px; }
+.btn-generate { flex: 1; padding: 15px 20px; border: none; border-radius: 14px; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.08em; color: #fff; background: linear-gradient(135deg, #6a11cb, #2575fc); cursor: pointer; box-shadow: 0 4px 20px rgba(37,117,252,0.3); transition: transform 0.15s, box-shadow 0.15s; -webkit-tap-highlight-color: transparent; }
+.btn-generate:active { transform: scale(0.97); box-shadow: 0 2px 10px rgba(37,117,252,0.2); }
+.btn-deep { flex: 1; padding: 15px 20px; border: none; border-radius: 14px; font-size: 0.9rem; font-weight: 700; letter-spacing: 0.08em; color: #fff; background: linear-gradient(135deg, #aa00ff, #ff1744); cursor: pointer; box-shadow: 0 4px 20px rgba(170,0,255,0.3); transition: transform 0.15s, box-shadow 0.15s; -webkit-tap-highlight-color: transparent; }
+.btn-deep:active { transform: scale(0.97); box-shadow: 0 2px 10px rgba(170,0,255,0.2); }
+.gen-timestamp { width: 100%; max-width: 440px; text-align: center; font-size: 0.6rem; color: #555; letter-spacing: 0.1em; margin-bottom: 24px; }
+.algo-info { width: 100%; max-width: 440px; background: #1a1a2e; border-radius: 14px; padding: 16px; margin-bottom: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+.algo-title { font-size: 0.6rem; color: #666; letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 8px; }
+.algo-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.algo-tag { font-size: 0.58rem; padding: 4px 10px; border-radius: 20px; background: rgba(255,255,255,0.06); color: #999; letter-spacing: 0.05em; }
+.history-section { width: 100%; max-width: 440px; margin-bottom: 24px; }
+.history-toggle { width: 100%; padding: 12px; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; background: transparent; color: #888; font-size: 0.7rem; letter-spacing: 0.15em; text-transform: uppercase; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color 0.2s; }
+.history-toggle:hover { color: #ccc; }
+.history-panel { margin-top: 12px; display: none; }
+.history-panel.open { display: block; }
+.hist-empty { text-align: center; color: #555; font-size: 0.75rem; padding: 20px; }
+.hist-entry { background: rgba(255,255,255,0.03); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.hist-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.hist-date { font-size: 0.75rem; color: #00e5ff; font-weight: 600; }
+.hist-mode { font-size: 0.55rem; padding: 2px 8px; border-radius: 10px; letter-spacing: 0.1em; }
+.hist-mode.manual { background: rgba(255,255,255,0.08); color: #aaa; }
+.hist-mode.auto { background: rgba(0,230,118,0.15); color: #00e676; }
+.hist-mode.deep { background: rgba(170,0,255,0.15); color: #d500f9; }
+.hist-set { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.hist-label { font-size: 0.6rem; color: #666; width: 14px; text-align: center; }
+.hist-num { font-size: 0.7rem; color: #ccc; background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 6px; font-weight: 600; font-variant-numeric: tabular-nums; }
+footer { margin-top: auto; padding: 20px 0 8px; text-align: center; font-size: 0.55rem; color: #444; letter-spacing: 0.12em; }
+.loading-overlay { display: none; position: fixed; inset: 0; background: rgba(17,17,17,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+.loading-overlay.active { display: flex; }
+.loading-spinner { width: 40px; height: 40px; border: 3px solid rgba(255,255,255,0.1); border-top-color: #aa00ff; border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 0.75rem; color: #aaa; letter-spacing: 0.15em; text-transform: uppercase; }
+@media (max-width: 380px) { h1{font-size:1.8rem} .num-ball{font-size:0.9rem} .numbers{gap:6px} .btn-row{flex-direction:column} }
+@media (min-width: 600px) { body{padding:24px 24px 40px} h1{font-size:2.6rem} .num-ball{font-size:1.2rem} .numbers{gap:12px} }
+</style>
 </head>
 <body>
 
 <h1>ロトAI Ω∞</h1>
 <p class="subtitle">AUTONOMOUS PREDICTION SYSTEM</p>
 
-<!-- Scheduler Status -->
 <div class="scheduler-bar" id="schedulerStatus">
   <span class="sched-dot waiting"></span> INITIALIZING...
 </div>
 
-<!-- Target Date -->
 <div class="date-card">
   <div class="date-label">Prediction Target Date</div>
   <div class="date-value" id="targetDate">----------</div>
   <div class="gen-mode manual" id="genMode">READY</div>
 </div>
 
-<!-- Predictions -->
 <div class="predictions" id="predictions"></div>
 
-<!-- Timestamp -->
 <div class="gen-timestamp" id="genTimestamp"></div>
 
-<!-- Buttons -->
 <div class="btn-row">
   <button class="btn-generate" id="btnGenerate">Generate Prediction</button>
   <button class="btn-deep" id="btnDeep">AI SEARCH</button>
 </div>
 
-<!-- Algorithms -->
 <div class="algo-info">
   <div class="algo-title">AI Algorithms</div>
   <div class="algo-list">
@@ -48,7 +103,6 @@
   </div>
 </div>
 
-<!-- History -->
 <div class="history-section">
   <button class="history-toggle" id="historyToggle">Prediction History</button>
   <div class="history-panel" id="historyPanel"></div>
@@ -56,60 +110,77 @@
 
 <footer>ロトAI Ω∞ AUTONOMOUS &mdash; AI-Powered Loto6 Prediction</footer>
 
-<!-- Loading Overlay -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
   <div class="loading-text">AI SEARCHING...</div>
 </div>
 
-<!-- Scripts (order matters: engine → scheduler → ai → init) -->
-<script src="ai-engine.js"></script>
-<script src="scheduler.js"></script>
-<script src="ai.js"></script>
 <script>
-(function () {
-  "use strict";
+/* ================================================================
+   AI ENGINE — Core prediction algorithms for Loto6 (1-43, pick 6)
+   ================================================================ */
+var AIEngine=(function(){"use strict";
+var TOTAL=43,PICK=6,IDEAL_SUM=132;
+function randomInt(a,b){return Math.floor(Math.random()*(b-a+1))+a}
+function randomSet(){var s=[];while(s.length<PICK){var n=randomInt(1,TOTAL);if(s.indexOf(n)===-1)s.push(n)}s.sort(function(a,b){return a-b});return s}
+function setSum(n){var s=0;for(var i=0;i<n.length;i++)s+=n[i];return s}
+function entropy(n){var sum=setSum(n);if(sum===0)return 0;var e=0;for(var i=0;i<n.length;i++){var p=n[i]/sum;if(p>0)e-=p*Math.log2(p)}return e}
+function oddEvenBalance(n){var c=0;for(var i=0;i<n.length;i++)if(n[i]%2===1)c++;return 1-Math.abs(c-3)/3}
+function sumBalance(n){return 1-Math.abs(setSum(n)-IDEAL_SUM)/IDEAL_SUM}
+function spreadScore(n){var g=[];for(var i=1;i<n.length;i++)g.push(n[i]-n[i-1]);var avg=(n[n.length-1]-n[0])/(n.length-1);var d=0;for(var i=0;i<g.length;i++)d+=Math.abs(g[i]-avg);return 1/(1+d/n.length)}
+function overlap(a,b){var c=0;for(var i=0;i<a.length;i++)if(b.indexOf(a[i])!==-1)c++;return c}
+function fitness(s,freq){var fs=0;if(freq){for(var i=0;i<s.length;i++)fs+=(freq[s[i]]||0)}return fs*0.25+entropy(s)*2.0+oddEvenBalance(s)*1.5+sumBalance(s)*1.2+spreadScore(s)*1.0}
+function buildFrequency(history){var freq=new Array(TOTAL+1).fill(0);if(history&&history.length>0){for(var r=0;r<history.length;r++){var nums=history[r];for(var k=0;k<nums.length;k++)freq[nums[k]]++}}else{var seed=Date.now()%999999;for(var r2=0;r2<500;r2++){var drawn=[];while(drawn.length<PICK){seed=(seed*1103515245+12345)&0x7fffffff;var n=(seed%TOTAL)+1;if(drawn.indexOf(n)===-1)drawn.push(n)}for(var k2=0;k2<drawn.length;k2++)freq[drawn[k2]]++}}return freq}
+function monteCarlo(freq,iter){iter=iter||100000;var best=null,bs=-Infinity;for(var i=0;i<iter;i++){var s=randomSet();var sc=fitness(s,freq);if(sc>bs){bs=sc;best=s}}return{set:best,score:bs}}
+function geneticAlgorithm(freq,opt){var PS=(opt&&opt.popSize)||100,GN=(opt&&opt.generations)||80,MR=(opt&&opt.mutRate)||0.15,EL=Math.max(4,Math.floor(PS*0.1)),TN=5;var pop=[];for(var i=0;i<PS;i++)pop.push(randomSet());function ts(){var b=null,bf=-Infinity;for(var t=0;t<TN;t++){var idx=randomInt(0,pop.length-1);var f=fitness(pop[idx],freq);if(f>bf){bf=f;b=pop[idx]}}return b}function cx(p1,p2){var pool=[];for(var k=0;k<p1.length;k++)if(pool.indexOf(p1[k])===-1)pool.push(p1[k]);for(var k2=0;k2<p2.length;k2++)if(pool.indexOf(p2[k2])===-1)pool.push(p2[k2]);for(var k3=pool.length-1;k3>0;k3--){var j=randomInt(0,k3);var t=pool[k3];pool[k3]=pool[j];pool[j]=t}var c=pool.slice(0,PICK);c.sort(function(a,b){return a-b});return c}function mt(s){if(Math.random()>=MR)return s;var c=s.slice();var idx=randomInt(0,PICK-1);var nn;do{nn=randomInt(1,TOTAL)}while(c.indexOf(nn)!==-1);c[idx]=nn;c.sort(function(a,b){return a-b});return c}for(var g=0;g<GN;g++){pop.sort(function(a,b){return fitness(b,freq)-fitness(a,freq)});var next=pop.slice(0,EL);while(next.length<PS){var p1=ts(),p2=ts();next.push(mt(cx(p1,p2)))}pop=next}pop.sort(function(a,b){return fitness(b,freq)-fitness(a,freq)});return{set:pop[0],score:fitness(pop[0],freq)}}
+function entropyOptimized(freq,iter){iter=iter||50000;var best=null,be=-Infinity;for(var i=0;i<iter;i++){var s=randomSet();var sc=entropy(s)*3+spreadScore(s)*2+oddEvenBalance(s)*1.5+sumBalance(s);if(sc>be){be=sc;best=s}}return{set:best,score:be}}
+function humanBiasSet(freq){var bs=null,bsc=-Infinity;for(var a=0;a<10000;a++){var s=[];while(s.length<2){var h=randomInt(32,TOTAL);if(s.indexOf(h)===-1)s.push(h)}while(s.length<PICK){var n=randomInt(1,TOTAL);if(s.indexOf(n)===-1){var lc=0;for(var k=0;k<s.length;k++)if(s[k]<=31)lc++;if(n<=31&&lc>=4)continue;s.push(n)}}s.sort(function(a,b){return a-b});var sc=fitness(s,freq);if(sc>bsc){bsc=sc;bs=s}}return{set:bs,score:bsc}}
+function generatePortfolio(freq,deep){var cands=[];cands.push(monteCarlo(freq,deep?100000:50000));cands.push(geneticAlgorithm(freq,deep?{popSize:150,generations:120}:undefined));cands.push(entropyOptimized(freq,deep?50000:20000));cands.push(humanBiasSet(freq));for(var x=0;x<20;x++){if(x%3===0)cands.push(monteCarlo(freq,deep?30000:10000));else if(x%3===1)cands.push(geneticAlgorithm(freq));else cands.push(entropyOptimized(freq,10000))}var port=[],used=[];cands.sort(function(a,b){return b.score-a.score});port.push(cands[0].set);used.push(0);while(port.length<5){var bi=-1,bp=-Infinity;for(var i=0;i<cands.length;i++){if(used.indexOf(i)!==-1)continue;var op=0;for(var p=0;p<port.length;p++)op+=overlap(cands[i].set,port[p])*4;var ps=cands[i].score-op;if(ps>bp){bp=ps;bi=i}}if(bi>=0){port.push(cands[bi].set);used.push(bi)}else{port.push(randomSet())}}return port}
+function deepSearch(freq){return generatePortfolio(freq,true)}
+return{TOTAL:TOTAL,PICK:PICK,buildFrequency:buildFrequency,monteCarlo:monteCarlo,geneticAlgorithm:geneticAlgorithm,entropyOptimized:entropyOptimized,humanBiasSet:humanBiasSet,generatePortfolio:generatePortfolio,deepSearch:deepSearch,fitness:fitness,randomSet:randomSet}})();
 
-  // Set initial target date
-  var nextDraw = Scheduler.getNextDrawDate();
-  document.getElementById("targetDate").textContent = Scheduler.formatDate(nextDraw);
+/* ================================================================
+   SCHEDULER — Auto-triggers predictions day before draw at 12:00
+   ================================================================ */
+var Scheduler=(function(){"use strict";
+var AUTO_HOUR=12,AUTO_MINUTE=0,DRAW_DAYS=[1,4],TRIGGER_DAYS=[0,3],CHECK_INTERVAL=60000,LAST_AUTO_KEY="lotoai_last_auto";
+var _timerId=null,_onAuto=null,_statusEl=null;
+function getNextDrawDate(){var now=new Date();var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());for(var d=1;d<=7;d++){var c=new Date(today.getTime()+d*86400000);if(DRAW_DAYS.indexOf(c.getDay())!==-1)return c}return today}
+function formatDate(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function getTodayKey(){return formatDate(new Date())}
+function shouldAutoGenerate(){var now=new Date();if(TRIGGER_DAYS.indexOf(now.getDay())===-1)return false;if(now.getHours()<AUTO_HOUR)return false;if(now.getHours()===AUTO_HOUR&&now.getMinutes()<AUTO_MINUTE)return false;try{if(localStorage.getItem(LAST_AUTO_KEY)===getTodayKey())return false}catch(e){}return true}
+function markAutoGenerated(){try{localStorage.setItem(LAST_AUTO_KEY,getTodayKey())}catch(e){}}
+function getNextAutoTime(){var now=new Date();var today=new Date(now.getFullYear(),now.getMonth(),now.getDate());for(var d=0;d<=7;d++){var c=new Date(today.getTime()+d*86400000);if(TRIGGER_DAYS.indexOf(c.getDay())!==-1){var tt=new Date(c);tt.setHours(AUTO_HOUR,AUTO_MINUTE,0,0);if(tt>now)return tt}}return null}
+function getCountdown(){var next=getNextAutoTime();if(!next)return null;var diff=next.getTime()-Date.now();if(diff<=0)return null;var h=Math.floor(diff/3600000),m=Math.floor((diff%3600000)/60000);if(h>=24){var d=Math.floor(h/24);h=h%24;return d+"d "+h+"h "+m+"m"}return h+"h "+m+"m"}
+function updateStatus(){if(!_statusEl)_statusEl=document.getElementById("schedulerStatus");if(!_statusEl)return;var now=new Date();var isTD=TRIGGER_DAYS.indexOf(now.getDay())!==-1;var already=false;try{already=localStorage.getItem(LAST_AUTO_KEY)===getTodayKey()}catch(e){}var html="";if(isTD&&already){html='<span class="sched-dot active"></span> AUTO PREDICTION COMPLETE'}else if(isTD&&now.getHours()>=AUTO_HOUR){html='<span class="sched-dot pending"></span> AUTO TRIGGER PENDING...'}else{var cd=getCountdown();html=cd?'<span class="sched-dot waiting"></span> NEXT AUTO: '+cd:'<span class="sched-dot waiting"></span> SCHEDULER ACTIVE'}_statusEl.innerHTML=html}
+function checkAndTrigger(){updateStatus();if(shouldAutoGenerate()){markAutoGenerated();if(typeof _onAuto==="function")_onAuto()}}
+function start(cb){_onAuto=cb;checkAndTrigger();_timerId=setInterval(checkAndTrigger,CHECK_INTERVAL)}
+function stop(){if(_timerId){clearInterval(_timerId);_timerId=null}}
+return{getNextDrawDate:getNextDrawDate,formatDate:formatDate,shouldAutoGenerate:shouldAutoGenerate,getCountdown:getCountdown,start:start,stop:stop,updateStatus:updateStatus}})();
 
-  // Manual generate
-  document.getElementById("btnGenerate").addEventListener("click", function () {
-    var result = LotoAI.generate("manual");
-    LotoAI.renderPredictions(result);
-  });
+/* ================================================================
+   AI ORCHESTRATOR — Coordinates Engine + Scheduler + History + UI
+   ================================================================ */
+var LotoAI=(function(){"use strict";
+var LABELS=["A","B","C","D","E"],STORAGE_KEY="lotoai_history";
+function loadHistory(){try{var r=localStorage.getItem(STORAGE_KEY);if(r)return JSON.parse(r)}catch(e){}return{predictions:[],metadata:{version:"1.0.0",system:"ロトAI Ω∞ AUTONOMOUS"}}}
+function saveHistory(h){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(h))}catch(e){}}
+function addPrediction(td,sets,mode){var h=loadHistory();h.predictions.unshift({id:Date.now(),targetDate:td,generatedAt:new Date().toISOString(),mode:mode||"manual",sets:sets});if(h.predictions.length>200)h.predictions=h.predictions.slice(0,200);saveHistory(h);return h}
+function generate(mode){var freq=AIEngine.buildFrequency(null);var port=mode==="deep"?AIEngine.deepSearch(freq):AIEngine.generatePortfolio(freq,false);var td=Scheduler.formatDate(Scheduler.getNextDrawDate());addPrediction(td,port,mode||"manual");return{targetDate:td,sets:port,mode:mode||"manual",timestamp:new Date().toISOString()}}
+function renderPredictions(r){var de=document.getElementById("targetDate");if(de)de.textContent=r.targetDate;var me=document.getElementById("genMode");if(me){if(r.mode==="deep"){me.textContent="AI DEEP SEARCH";me.className="gen-mode deep"}else if(r.mode==="auto"){me.textContent="AUTO GENERATED";me.className="gen-mode auto"}else{me.textContent="MANUAL";me.className="gen-mode manual"}}var c=document.getElementById("predictions");if(!c)return;c.innerHTML="";for(var i=0;i<r.sets.length;i++){var card=document.createElement("div");card.className="pred-card";card.style.animation="none";void card.offsetHeight;card.style.animation="";var lb=document.createElement("div");lb.className="pred-label";lb.textContent="Prediction "+LABELS[i];card.appendChild(lb);var gr=document.createElement("div");gr.className="numbers";for(var j=0;j<r.sets[i].length;j++){var b=document.createElement("div");b.className="num-ball";if(r.sets[i][j]>=32)b.classList.add("high");b.textContent=String(r.sets[i][j]).padStart(2,"0");gr.appendChild(b)}card.appendChild(gr);c.appendChild(card)}var ts=document.getElementById("genTimestamp");if(ts)ts.textContent="Generated: "+new Date().toLocaleString("ja-JP")}
+function renderHistory(){var hp=document.getElementById("historyPanel");if(!hp)return;var h=loadHistory();if(h.predictions.length===0){hp.innerHTML='<div class="hist-empty">No prediction history yet.</div>';return}var html="",lim=Math.min(h.predictions.length,10);for(var i=0;i<lim;i++){var p=h.predictions[i];html+='<div class="hist-entry"><div class="hist-meta"><span class="hist-date">'+p.targetDate+'</span><span class="hist-mode '+(p.mode||"manual")+'">'+(p.mode||"manual").toUpperCase()+'</span></div>';for(var s=0;s<p.sets.length;s++){html+='<div class="hist-set"><span class="hist-label">'+LABELS[s]+'</span>';for(var n=0;n<p.sets[s].length;n++)html+='<span class="hist-num">'+String(p.sets[s][n]).padStart(2,"0")+'</span>';html+='</div>'}html+='</div>'}hp.innerHTML=html}
+return{generate:generate,renderPredictions:renderPredictions,renderHistory:renderHistory,loadHistory:loadHistory,LABELS:LABELS}})();
 
-  // Deep AI search
-  document.getElementById("btnDeep").addEventListener("click", function () {
-    var overlay = document.getElementById("loadingOverlay");
-    overlay.classList.add("active");
-
-    setTimeout(function () {
-      var result = LotoAI.generate("deep");
-      LotoAI.renderPredictions(result);
-      overlay.classList.remove("active");
-    }, 100);
-  });
-
-  // History toggle
-  document.getElementById("historyToggle").addEventListener("click", function () {
-    var panel = document.getElementById("historyPanel");
-    panel.classList.toggle("open");
-    if (panel.classList.contains("open")) {
-      LotoAI.renderHistory();
-    }
-  });
-
-  // Start scheduler (auto-generate on day before draw at 12:00)
-  Scheduler.start(function () {
-    var result = LotoAI.generate("auto");
-    LotoAI.renderPredictions(result);
-  });
-
-  // Initial prediction
-  var initial = LotoAI.generate("manual");
-  LotoAI.renderPredictions(initial);
+/* ================================================================
+   INIT
+   ================================================================ */
+(function(){"use strict";
+document.getElementById("targetDate").textContent=Scheduler.formatDate(Scheduler.getNextDrawDate());
+document.getElementById("btnGenerate").addEventListener("click",function(){LotoAI.renderPredictions(LotoAI.generate("manual"))});
+document.getElementById("btnDeep").addEventListener("click",function(){var ov=document.getElementById("loadingOverlay");ov.classList.add("active");setTimeout(function(){LotoAI.renderPredictions(LotoAI.generate("deep"));ov.classList.remove("active")},100)});
+document.getElementById("historyToggle").addEventListener("click",function(){var p=document.getElementById("historyPanel");p.classList.toggle("open");if(p.classList.contains("open"))LotoAI.renderHistory()});
+Scheduler.start(function(){LotoAI.renderPredictions(LotoAI.generate("auto"))});
+LotoAI.renderPredictions(LotoAI.generate("manual"));
 })();
 </script>
 </body>
