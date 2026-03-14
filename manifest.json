@@ -1,21 +1,21 @@
 {
-  "name": "ロト6予測ラボ",
-  "short_name": "ロト6",
-  "description": "ロト6の統計分析に基づく予想番号自動生成アプリ",
+  "name": "ロト6 AI予測ラボ",
+  "short_name": "ロト6予測",
+  "description": "ロト6の統計分析とAIアルゴリズムで予想番号を自動生成するアプリ",
   "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#0a0a0f",
+  "orientation": "portrait",
   "theme_color": "#f59e0b",
-  "orientation": "portrait-primary",
+  "background_color": "#111111",
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "./icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "./icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

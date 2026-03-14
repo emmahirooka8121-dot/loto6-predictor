@@ -1,32 +1,42 @@
-/* ===== Statistical Analysis Engine ===== */
+/* ===== Statistical Analysis Engine (v3 - 12 Types) ===== */
 
 const Analyzer = (() => {
-  const NUM_RANGE = Array.from({length: 43}, (_, i) => i + 1);
+  'use strict';
 
   function _slice(data, lastN) {
-    if (!lastN || lastN === 'all' || lastN >= data.length) return data;
-    return data.slice(0, lastN);
+    return lastN ? data.slice(0, lastN) : data;
   }
 
+  // 1. Frequency (W1)
   function calcFrequency(data, lastN) {
     const d = _slice(data, lastN);
-    const counts = {};
-    NUM_RANGE.forEach(n => counts[n] = 0);
-    d.forEach(draw => draw.nums.forEach(n => counts[n]++));
-    const total = d.length;
+    const freq = {};
+    for (let n = 1; n <= 43; n++) freq[n] = 0;
+    d.forEach(draw => draw.nums.forEach(n => freq[n]++));
     const result = {};
-    NUM_RANGE.forEach(n => {
-      result[n] = {
-        count: counts[n],
-        rate: total > 0 ? counts[n] / total : 0,
-      };
-    });
+    for (let n = 1; n <= 43; n++) {
+      result[n] = { count: freq[n], rate: d.length > 0 ? freq[n] / d.length : 0 };
+    }
     return result;
   }
 
-  function calcOddEven(data) {
+  // 2. Dormancy (W2)
+  function calcDormancy(data) {
+    const dormancy = {};
+    for (let n = 1; n <= 43; n++) dormancy[n] = data.length;
+    for (let i = 0; i < data.length; i++) {
+      data[i].nums.forEach(n => {
+        if (dormancy[n] === data.length) dormancy[n] = i;
+      });
+    }
+    return dormancy;
+  }
+
+  // 3. Odd/Even (W4)
+  function calcOddEven(data, lastN) {
+    const d = _slice(data, lastN);
     const patterns = {};
-    data.forEach(draw => {
+    d.forEach(draw => {
       const odd = draw.nums.filter(n => n % 2 === 1).length;
       const key = `${odd}:${6 - odd}`;
       patterns[key] = (patterns[key] || 0) + 1;
@@ -34,158 +44,231 @@ const Analyzer = (() => {
     return patterns;
   }
 
-  function calcRangeDistribution(data) {
-    const ranges = {'1-9': 0, '10-19': 0, '20-29': 0, '30-39': 0, '40-43': 0};
-    let total = 0;
-    data.forEach(draw => draw.nums.forEach(n => {
-      total++;
+  // 4. Range distribution (W7)
+  function calcRangeDistribution(data, lastN) {
+    const d = _slice(data, lastN);
+    const ranges = { '1-9': 0, '10-19': 0, '20-29': 0, '30-39': 0, '40-43': 0 };
+    d.forEach(draw => draw.nums.forEach(n => {
       if (n <= 9) ranges['1-9']++;
       else if (n <= 19) ranges['10-19']++;
       else if (n <= 29) ranges['20-29']++;
       else if (n <= 39) ranges['30-39']++;
       else ranges['40-43']++;
     }));
-    const result = {};
-    for (const [k, v] of Object.entries(ranges)) {
-      result[k] = { count: v, rate: total > 0 ? v / total : 0 };
-    }
-    return result;
+    return ranges;
   }
 
-  function calcSumStats(data) {
-    if (!data.length) return {};
-    const sums = data.map(d => d.nums.reduce((a, b) => a + b, 0));
-    const sorted = [...sums].sort((a, b) => a - b);
-    const n = sorted.length;
-    const mean = sums.reduce((a, b) => a + b, 0) / n;
-    const median = n % 2 === 1 ? sorted[Math.floor(n/2)] : (sorted[n/2-1] + sorted[n/2]) / 2;
-    const variance = sums.reduce((acc, s) => acc + (s - mean) ** 2, 0) / n;
-    const std = Math.sqrt(variance);
-    return {
-      mean: Math.round(mean * 100) / 100,
-      median, std: Math.round(std * 100) / 100,
-      min: sorted[0], max: sorted[n-1],
-      q1: sorted[Math.floor(n/4)],
-      q3: sorted[Math.floor(3*n/4)],
-      distribution: _buildHistogram(sums),
-    };
-  }
-
-  function _buildHistogram(values) {
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const bucketSize = 10;
-    const start = Math.floor(min / bucketSize) * bucketSize;
-    const end = Math.ceil((max+1) / bucketSize) * bucketSize;
-    const buckets = {};
-    for (let i = start; i < end; i += bucketSize) {
-      buckets[`${i}-${i+bucketSize-1}`] = 0;
-    }
-    values.forEach(v => {
-      const key = `${Math.floor(v / bucketSize) * bucketSize}-${Math.floor(v / bucketSize) * bucketSize + bucketSize - 1}`;
-      if (buckets[key] !== undefined) buckets[key]++;
+  // 5. Sum statistics (W5)
+  function calcSumStats(data, lastN) {
+    const d = _slice(data, lastN);
+    if (d.length === 0) return { mean: 0, median: 0, stdDev: 0, histogram: {} };
+    const sums = d.map(draw => draw.nums.reduce((a, b) => a + b, 0));
+    sums.sort((a, b) => a - b);
+    const mean = Math.round(sums.reduce((a, b) => a + b, 0) / sums.length);
+    const median = sums[Math.floor(sums.length / 2)];
+    const variance = sums.reduce((s, v) => s + (v - mean) ** 2, 0) / sums.length;
+    const stdDev = Math.round(Math.sqrt(variance));
+    const histogram = {};
+    sums.forEach(s => {
+      const bin = Math.floor(s / 20) * 20;
+      const label = `${bin}-${bin + 19}`;
+      histogram[label] = (histogram[label] || 0) + 1;
     });
-    return buckets;
+    return { mean, median, stdDev, histogram, min: sums[0], max: sums[sums.length - 1] };
   }
 
-  function calcConsecutive(data) {
-    let count = 0;
-    const pairs = {};
-    data.forEach(draw => {
-      const nums = [...draw.nums].sort((a,b) => a-b);
+  // 6. Consecutive numbers (Improvement 2)
+  function calcConsecutive(data, lastN) {
+    const d = _slice(data, lastN);
+    let withConsec = 0;
+    const pairCounts = {};
+    d.forEach(draw => {
       let hasConsec = false;
-      for (let i = 0; i < nums.length - 1; i++) {
-        if (nums[i+1] - nums[i] === 1) {
+      const sorted = [...draw.nums].sort((a, b) => a - b);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (sorted[i + 1] - sorted[i] === 1) {
           hasConsec = true;
-          const key = `${nums[i]}-${nums[i+1]}`;
-          pairs[key] = (pairs[key] || 0) + 1;
+          const pair = `${sorted[i]}-${sorted[i + 1]}`;
+          pairCounts[pair] = (pairCounts[pair] || 0) + 1;
         }
       }
-      if (hasConsec) count++;
+      if (hasConsec) withConsec++;
     });
-    return { count, total: data.length, rate: data.length > 0 ? count / data.length : 0, pairs };
+    const rate = d.length > 0 ? withConsec / d.length : 0;
+    const topPairs = Object.entries(pairCounts)
+      .sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([pair, count]) => ({ pair, count }));
+    return { rate, withConsec, total: d.length, topPairs };
   }
 
-  function calcDormancy(data) {
-    if (!data.length) return {};
-    const latestId = data[0].id;
-    const lastSeen = {};
-    // data is sorted newest first
-    for (let i = data.length - 1; i >= 0; i--) {
-      data[i].nums.forEach(n => lastSeen[n] = data[i].id);
-    }
+  // 7. Last digit analysis (Improvement 3)
+  function calcLastDigit(data, lastN) {
+    const d = _slice(data, lastN);
+    const digits = {};
+    for (let i = 0; i <= 9; i++) digits[i] = 0;
+    d.forEach(draw => draw.nums.forEach(n => digits[n % 10]++));
+    const total = d.length * 6;
     const result = {};
-    NUM_RANGE.forEach(n => {
-      result[n] = lastSeen[n] ? latestId - lastSeen[n] : latestId;
-    });
+    for (let i = 0; i <= 9; i++) {
+      result[i] = { count: digits[i], rate: total > 0 ? digits[i] / total : 0 };
+    }
     return result;
   }
 
-  function calcCorrelation(data, topN = 20) {
+  // 8. Interval distribution / Cycle (Improvement 4, W11)
+  function calcIntervalDistribution(data) {
+    const dormancy = calcDormancy(data);
+    const result = {};
+    for (let n = 1; n <= 43; n++) {
+      const indices = [];
+      for (let i = 0; i < data.length; i++) {
+        if (data[i].nums.includes(n)) indices.push(i);
+      }
+      const intervals = [];
+      for (let i = 0; i < indices.length - 1; i++) {
+        intervals.push(indices[i + 1] - indices[i]);
+      }
+      if (intervals.length >= 2) {
+        const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        const lambda = 1 / avg;
+        const d = dormancy[n];
+        const probNext = 1 - Math.exp(-lambda * (d + 1));
+        result[n] = { avgInterval: avg, intervals, dormancy: d, probNext };
+      } else {
+        result[n] = { avgInterval: null, intervals, dormancy: dormancy[n], probNext: 6 / 43 };
+      }
+    }
+    return result;
+  }
+
+  // 9. Hot/Cold cycle (Improvement 5)
+  function calcHotColdCycle(data, windowSize) {
+    windowSize = windowSize || 10;
+    const expected = 6 / 43;
+    const result = {};
+    for (let n = 1; n <= 43; n++) {
+      const recentSlice = data.slice(0, windowSize);
+      const recentCount = recentSlice.filter(d => d.nums.includes(n)).length;
+      const recentRate = windowSize > 0 ? recentCount / windowSize : 0;
+      const prevSlice = data.slice(windowSize, windowSize * 2);
+      const prevCount = prevSlice.filter(d => d.nums.includes(n)).length;
+      const prevRate = prevSlice.length > 0 ? prevCount / prevSlice.length : 0;
+      const trend = recentRate - prevRate;
+      result[n] = {
+        state: recentRate > expected * 1.3 ? 'hot' : recentRate < expected * 0.7 ? 'cold' : 'normal',
+        recentRate, trend,
+      };
+    }
+    return result;
+  }
+
+  // 10. Pair correlation (W8)
+  function calcCorrelation(data, topN) {
+    topN = topN || 20;
     const pairs = {};
     data.forEach(draw => {
-      const nums = [...draw.nums].sort((a,b) => a-b);
-      for (let i = 0; i < nums.length; i++) {
-        for (let j = i + 1; j < nums.length; j++) {
-          const key = `${nums[i]}-${nums[j]}`;
+      for (let i = 0; i < draw.nums.length; i++) {
+        for (let j = i + 1; j < draw.nums.length; j++) {
+          const key = `${draw.nums[i]}-${draw.nums[j]}`;
           pairs[key] = (pairs[key] || 0) + 1;
         }
       }
     });
     return Object.entries(pairs)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, topN)
+      .sort((a, b) => b[1] - a[1]).slice(0, topN)
       .map(([pair, count]) => ({ pair, count }));
   }
 
+  // 11. Triplet correlation (Improvement 6, W12)
+  function calcTriplets(data, topN) {
+    topN = topN || 10;
+    const trips = {};
+    data.forEach(draw => {
+      for (let i = 0; i < draw.nums.length; i++) {
+        for (let j = i + 1; j < draw.nums.length; j++) {
+          for (let k = j + 1; k < draw.nums.length; k++) {
+            const key = `${draw.nums[i]}-${draw.nums[j]}-${draw.nums[k]}`;
+            trips[key] = (trips[key] || 0) + 1;
+          }
+        }
+      }
+    });
+    return Object.entries(trips)
+      .sort((a, b) => b[1] - a[1]).slice(0, topN)
+      .map(([triplet, count]) => ({ triplet, count }));
+  }
+
+  // 12. Weekday trend (W10)
   function calcWeekdayTrend(data) {
-    const mon = data.filter(d => new Date(d.date + 'T00:00:00').getDay() === 1);
-    const thu = data.filter(d => new Date(d.date + 'T00:00:00').getDay() === 4);
+    const monday = data.filter(d => new Date(d.date + 'T00:00:00').getDay() === 1);
+    const thursday = data.filter(d => new Date(d.date + 'T00:00:00').getDay() === 4);
+    function freqFor(subset) {
+      const freq = {};
+      for (let n = 1; n <= 43; n++) freq[n] = 0;
+      subset.forEach(d => d.nums.forEach(n => freq[n]++));
+      const result = {};
+      for (let n = 1; n <= 43; n++) {
+        result[n] = { count: freq[n], rate: subset.length > 0 ? freq[n] / subset.length : 0 };
+      }
+      return result;
+    }
     return {
-      monday: { count: mon.length, frequency: calcFrequency(mon) },
-      thursday: { count: thu.length, frequency: calcFrequency(thu) },
+      monday: { count: monday.length, frequency: freqFor(monday) },
+      thursday: { count: thursday.length, frequency: freqFor(thursday) },
     };
   }
 
-  function calcMovingAvg(data, window = 20) {
-    if (data.length < window) return {};
-    const recent = data.slice(0, window);
-    const allFreq = calcFrequency(data);
-    const recentFreq = calcFrequency(recent);
-    const result = {};
-    NUM_RANGE.forEach(n => {
-      const allRate = allFreq[n].rate;
-      const recentRate = recentFreq[n].rate;
-      const slope = recentRate - allRate;
-      result[n] = {
-        allRate: Math.round(allRate * 10000) / 10000,
-        recentRate: Math.round(recentRate * 10000) / 10000,
-        slope: Math.round(slope * 10000) / 10000,
-        trending: slope > 0.02 ? 'up' : (slope < -0.02 ? 'down' : 'stable'),
-      };
-    });
-    return result;
+  // Trend / Moving avg
+  function calcMovingAvg(data, windowSize) {
+    windowSize = windowSize || 20;
+    const scores = {};
+    for (let n = 1; n <= 43; n++) {
+      const recent = data.slice(0, windowSize);
+      const older = data.slice(windowSize, windowSize * 2);
+      const recentCount = recent.filter(d => d.nums.includes(n)).length;
+      const olderCount = older.filter(d => d.nums.includes(n)).length;
+      const recentRate = windowSize > 0 ? recentCount / windowSize : 0;
+      const olderRate = older.length > 0 ? olderCount / older.length : 0;
+      scores[n] = { recentRate, olderRate, slope: recentRate - olderRate };
+    }
+    return scores;
   }
 
+  // Spread score helper
+  function calcSpreadScore(nums) {
+    if (nums.length < 2) return 0;
+    const sorted = [...nums].sort((a, b) => a - b);
+    const gaps = [];
+    for (let i = 1; i < sorted.length; i++) gaps.push(sorted[i] - sorted[i - 1]);
+    const idealGap = 42 / 5;
+    const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    return Math.max(0, 1 - Math.abs(avgGap - idealGap) / idealGap);
+  }
+
+  // Full analysis
   function fullAnalysis(data, lastN) {
-    const d = _slice(data, lastN);
     return {
-      totalDraws: d.length,
-      frequency: calcFrequency(d),
-      oddEven: calcOddEven(d),
-      rangeDist: calcRangeDistribution(d),
-      sumStats: calcSumStats(d),
-      consecutive: calcConsecutive(d),
-      dormancy: calcDormancy(d),
-      correlation: calcCorrelation(d),
-      weekdayTrend: calcWeekdayTrend(d),
-      movingAvg: calcMovingAvg(d),
+      frequency: calcFrequency(data, lastN),
+      dormancy: calcDormancy(data),
+      oddEven: calcOddEven(data, lastN),
+      rangeDist: calcRangeDistribution(data, lastN),
+      sumStats: calcSumStats(data, lastN),
+      consecutive: calcConsecutive(data, lastN),
+      lastDigit: calcLastDigit(data, lastN),
+      intervalDist: calcIntervalDistribution(data),
+      hotCold: calcHotColdCycle(data),
+      correlation: calcCorrelation(data),
+      triplets: calcTriplets(data),
+      weekdayTrend: calcWeekdayTrend(data),
+      movingAvg: calcMovingAvg(data),
+      sampleSize: _slice(data, lastN).length,
     };
   }
 
   return {
-    calcFrequency, calcOddEven, calcRangeDistribution, calcSumStats,
-    calcConsecutive, calcDormancy, calcCorrelation, calcWeekdayTrend,
-    calcMovingAvg, fullAnalysis,
+    calcFrequency, calcDormancy, calcOddEven, calcRangeDistribution,
+    calcSumStats, calcConsecutive, calcLastDigit, calcIntervalDistribution,
+    calcHotColdCycle, calcCorrelation, calcTriplets, calcWeekdayTrend,
+    calcMovingAvg, calcSpreadScore, fullAnalysis,
   };
 })();

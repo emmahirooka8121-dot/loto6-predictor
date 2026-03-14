@@ -1,57 +1,66 @@
-const CACHE_NAME = 'loto6-v1';
+const CACHE_NAME = 'loto6-v3';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/app.js',
   './js/data.js',
+  './js/storage.js',
+  './js/utils.js',
   './js/analyzer.js',
+  './js/ai-engine.js',
   './js/predictor.js',
+  './js/scheduler.js',
   './js/verifier.js',
   './js/learner.js',
-  './js/storage.js',
+  './js/backtest.js',
   './js/charts.js',
-  './js/utils.js',
+  './js/app.js',
   './manifest.json',
   './icons/icon-192.png',
-  './icons/icon-512.png'
+  './icons/icon-512.png',
 ];
 
-const CDN_ASSETS = [
-  'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js',
-  'https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap'
+const CDN = [
+  'https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap',
+  'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',
+  'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js',
 ];
 
-self.addEventListener('install', e => {
+self.addEventListener('install', function(e) {
   e.waitUntil(
-    caches.open(CACHE_NAME).then(cache =>
-      cache.addAll(ASSETS).then(() =>
-        Promise.allSettled(CDN_ASSETS.map(url => cache.add(url)))
-      )
-    ).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then(function(cache) {
+      return cache.addAll(ASSETS).catch(function() {});
+    })
   );
+  self.skipWaiting();
 });
 
-self.addEventListener('activate', e => {
+self.addEventListener('activate', function(e) {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys().then(function(keys) {
+      return Promise.all(
+        keys.filter(function(k) { return k !== CACHE_NAME; })
+            .map(function(k) { return caches.delete(k); })
+      );
+    })
   );
+  self.clients.claim();
 });
 
-self.addEventListener('fetch', e => {
+self.addEventListener('fetch', function(e) {
   e.respondWith(
-    caches.match(e.request).then(cached => {
+    caches.match(e.request).then(function(cached) {
       if (cached) return cached;
-      return fetch(e.request).then(response => {
+      return fetch(e.request).then(function(response) {
         if (response && response.status === 200) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(e.request, clone));
+          var clone = response.clone();
+          caches.open(CACHE_NAME).then(function(cache) {
+            cache.put(e.request, clone);
+          });
         }
         return response;
-      }).catch(() => {
-        if (e.request.destination === 'document') {
+      }).catch(function() {
+        if (e.request.mode === 'navigate') {
           return caches.match('./index.html');
         }
       });

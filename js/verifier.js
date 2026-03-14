@@ -1,117 +1,138 @@
-/* ===== Verification Engine ===== */
+/* ===== Verification Engine (v3) ===== */
 
 const Verifier = (() => {
+  'use strict';
 
   function verifyPrediction(prediction, draw) {
-    const actualNums = new Set(draw.nums);
     const results = prediction.sets.map(set => {
-      const matched = set.nums.filter(n => actualNums.has(n));
+      const matched = set.nums.filter(n => draw.nums.includes(n));
       const bonusMatch = set.nums.includes(draw.bonus);
-      const matchCount = matched.length;
-      const prize = Utils.prizeTier(matchCount, bonusMatch);
+      const prize = Utils.prizeTier(matched.length, bonusMatch);
       return {
         strategy: set.strategy,
+        nums: set.nums,
         matched,
-        matchCount,
+        matchCount: matched.length,
         bonusMatch,
         prize,
+        confidence: set.confidence || 0,
       };
     });
 
-    const bestResult = results.reduce((best, r) =>
+    const bestMatch = results.reduce((best, r) =>
       r.matchCount > best.matchCount ? r : best, results[0]);
 
-    return {
+    const verification = {
       targetDrawId: prediction.targetDrawId,
       drawDate: draw.date,
       actualNums: draw.nums,
       actualBonus: draw.bonus,
       results,
-      bestMatch: { strategy: bestResult.strategy, matchCount: bestResult.matchCount },
+      bestMatch: { strategy: bestMatch.strategy, matchCount: bestMatch.matchCount },
       verifiedAt: new Date().toISOString(),
-      learningApplied: false,
     };
+
+    Storage.saveVerification(verification);
+    Storage.updatePrediction(prediction.targetDrawId, { verified: true });
+
+    // Auto-learn if enabled
+    const settings = Storage.getSettings();
+    if (settings.autoLearn) {
+      Learner.autoLearn();
+    }
+
+    return verification;
   }
 
   function verifyAll() {
     const predictions = Storage.getPredictions();
-    const allDraws = Utils.getAllDrawData();
-    const drawMap = {};
-    allDraws.forEach(d => drawMap[d.id] = d);
+    const draws = Utils.getAllDrawData();
+    const verifications = Storage.getVerifications();
+    const verifiedIds = new Set(verifications.map(v => v.targetDrawId));
 
-    let newVerifications = 0;
-
+    let count = 0;
     predictions.forEach(pred => {
-      if (pred.verified) return;
-      const draw = drawMap[pred.targetDrawId];
-      if (!draw) return;
-
-      const verification = verifyPrediction(pred, draw);
-      Storage.saveVerification(verification);
-      Storage.updatePrediction(pred.targetDrawId, { verified: true });
-      newVerifications++;
-
-      // Auto-learn if enabled
-      const settings = Storage.getSettings();
-      if (settings.autoLearn) {
-        const result = Learner.autoLearn();
-        if (result) {
-          verification.learningApplied = true;
-          Storage.saveVerification(verification);
-        }
+      if (pred.verified || verifiedIds.has(pred.targetDrawId)) return;
+      const draw = draws.find(d => d.id === pred.targetDrawId);
+      if (draw) {
+        verifyPrediction(pred, draw);
+        count++;
       }
     });
-
-    return newVerifications;
+    return count;
   }
 
   function getStats(lastN) {
-    let vers = Storage.getVerifications();
-    if (lastN) vers = vers.slice(0, lastN);
+    const verifications = Storage.getVerifications();
+    const data = lastN ? verifications.slice(0, lastN) : verifications;
 
-    if (vers.length === 0) {
-      return { total: 0, avgMatch: 0, maxMatch: 0, prizeCount: {}, strategyStats: {} };
+    if (data.length === 0) {
+      return { total: 0, avgMatch: '0', maxMatch: 0, prizeCount: {}, strategyStats: {} };
     }
 
-    const prizeCount = {'1等':0,'2等':0,'3等':0,'4等':0,'5等':0,'ハズレ':0};
-    const strategyTotals = {};
-    let totalMatch = 0, maxMatch = 0, totalResults = 0;
+    let totalMatch = 0;
+    let totalSets = 0;
+    let maxMatch = 0;
+    const prizeCount = {};
+    const strategyStats = {};
 
-    vers.forEach(v => {
+    data.forEach(v => {
       v.results.forEach(r => {
         totalMatch += r.matchCount;
-        totalResults++;
+        totalSets++;
         if (r.matchCount > maxMatch) maxMatch = r.matchCount;
         prizeCount[r.prize] = (prizeCount[r.prize] || 0) + 1;
-        if (!strategyTotals[r.strategy]) {
-          strategyTotals[r.strategy] = { total: 0, matchSum: 0, maxMatch: 0 };
+
+        if (!strategyStats[r.strategy]) {
+          strategyStats[r.strategy] = { total: 0, matchSum: 0, prizes: {} };
         }
-        strategyTotals[r.strategy].total++;
-        strategyTotals[r.strategy].matchSum += r.matchCount;
-        if (r.matchCount > strategyTotals[r.strategy].maxMatch) {
-          strategyTotals[r.strategy].maxMatch = r.matchCount;
-        }
+        strategyStats[r.strategy].total++;
+        strategyStats[r.strategy].matchSum += r.matchCount;
+        strategyStats[r.strategy].prizes[r.prize] = (strategyStats[r.strategy].prizes[r.prize] || 0) + 1;
       });
     });
 
-    const strategyStats = {};
-    for (const [s, data] of Object.entries(strategyTotals)) {
-      strategyStats[s] = {
-        total: data.total,
-        avgMatch: Math.round(data.matchSum / data.total * 100) / 100,
-        maxMatch: data.maxMatch,
-      };
+    // Compute averages
+    for (const key of Object.keys(strategyStats)) {
+      strategyStats[key].avgMatch = (strategyStats[key].matchSum / strategyStats[key].total).toFixed(2);
     }
 
     return {
-      total: vers.length,
-      totalResults,
-      avgMatch: totalResults > 0 ? Math.round(totalMatch / totalResults * 100) / 100 : 0,
+      total: data.length,
+      totalSets,
+      avgMatch: totalSets > 0 ? (totalMatch / totalSets).toFixed(2) : '0',
       maxMatch,
       prizeCount,
       strategyStats,
     };
   }
 
-  return { verifyPrediction, verifyAll, getStats };
+  // Get accuracy trend data for chart
+  function getAccuracyTrend() {
+    const verifications = Storage.getVerifications();
+    if (verifications.length === 0) return [];
+
+    // Reverse to chronological order
+    const sorted = [...verifications].reverse();
+    const trend = [];
+    let cumSum = 0;
+    let cumCount = 0;
+
+    sorted.forEach((v, idx) => {
+      const avgForThis = v.results.reduce((s, r) => s + r.matchCount, 0) / v.results.length;
+      cumSum += avgForThis;
+      cumCount++;
+      trend.push({
+        drawId: v.targetDrawId,
+        date: v.drawDate,
+        avgMatch: avgForThis,
+        cumAvg: cumSum / cumCount,
+        idx: idx + 1,
+      });
+    });
+
+    return trend;
+  }
+
+  return { verifyPrediction, verifyAll, getStats, getAccuracyTrend };
 })();

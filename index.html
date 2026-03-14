@@ -6,205 +6,283 @@
   <meta name="theme-color" content="#f59e0b">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="ロト6の統計分析に基づく予想番号自動生成アプリ">
-  <title>ロト6予測ラボ</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="description" content="ロト6 AI予測 - 統計分析とAIアルゴリズムで予想番号を自動生成">
+  <title>ロト6 AI予測ラボ</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/icon-192.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./css/style.css">
 </head>
 <body data-theme="dark">
 
   <!-- Header -->
   <header class="app-header">
-    <h1 class="app-title">🎯 ロト6 予測ラボ</h1>
-    <div id="nextDrawInfo" class="next-draw-info"></div>
+    <span class="app-title">ロト6 AI予測ラボ</span>
+    <span class="header-info" id="nextDrawInfo"></span>
   </header>
 
-  <!-- Main Content Area -->
-  <main class="app-main" id="appMain">
-
-    <!-- 1. 予想画面 -->
-    <section class="tab-content active" id="tabPredict">
+  <!-- Tab Contents -->
+  <main>
+    <!-- 1. Predict -->
+    <section id="tabPredict" class="tab-content active">
+      <div id="dashboardWidgets" class="dashboard-widgets"></div>
+      <div id="schedulerStatus" class="status-bar"></div>
+      <div id="lockBanner"></div>
       <div id="predictionsDisplay"></div>
-      <button class="btn-generate" id="btnGenerate">
-        <span class="btn-generate-icon">🎲</span>
-        <span>予想を生成する</span>
-      </button>
-      <p class="disclaimer">⚠️ ロト6は完全にランダムな抽選です。本予想は当選を保証するものではありません。</p>
+      <div class="algo-tags" id="algoTags"></div>
+      <button class="btn btn-primary" id="btnGenerate">予測を生成</button>
+      <button class="btn btn-advanced" id="btnAdvanced">AI高度探索</button>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。本アプリは統計的傾向とAIアルゴリズムに基づく参考値を生成するもので、当選を保証するものではありません。
+      </div>
     </section>
 
-    <!-- 2. 分析画面 -->
-    <section class="tab-content" id="tabAnalysis">
-      <div class="period-selector" id="periodSelector">
+    <!-- 2. Analysis -->
+    <section id="tabAnalysis" class="tab-content">
+      <div class="period-selector">
         <button class="period-btn active" data-period="10">直近10回</button>
         <button class="period-btn" data-period="20">直近20回</button>
         <button class="period-btn" data-period="50">直近50回</button>
         <button class="period-btn" data-period="all">全期間</button>
       </div>
-      <div id="analysisContent" class="analysis-content"></div>
-    </section>
-
-    <!-- 3. 履歴画面 -->
-    <section class="tab-content" id="tabHistory">
-      <div id="latestDraw" class="latest-draw-card"></div>
-      <div class="history-controls">
-        <input type="text" id="historySearch" class="search-input" placeholder="番号で検索（例: 17）">
-        <button class="btn-secondary" id="btnAddDraw">＋ 結果を追加</button>
+      <div id="analysisContent"></div>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。統計分析は過去の傾向を示すもので、将来の結果を予測するものではありません。
       </div>
-      <div id="historyList" class="history-list"></div>
-      <button class="btn-secondary btn-load-more" id="btnLoadMore">さらに読み込む</button>
     </section>
 
-    <!-- 4. 予測記録画面 -->
-    <section class="tab-content" id="tabRecords">
-      <div id="recordsSummary" class="records-summary"></div>
-      <div class="records-filters">
-        <select id="recordsFilter" class="filter-select">
+    <!-- 3. History -->
+    <section id="tabHistory" class="tab-content">
+      <div id="latestDraw" class="card"></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn btn-sm btn-secondary" id="btnFetchResult">結果を自動取得</button>
+        <button class="btn btn-sm btn-primary" id="btnAddDraw">+ 結果を追加</button>
+      </div>
+      <input type="text" class="search-input" id="historySearch" placeholder="番号で検索（例: 17）">
+      <div id="historyList"></div>
+      <button class="btn btn-secondary btn-sm" id="btnLoadMore" style="display:none;width:100%;margin-top:8px">もっと表示</button>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。本アプリは当選を保証するものではありません。
+      </div>
+    </section>
+
+    <!-- 4. Records -->
+    <section id="tabRecords" class="tab-content">
+      <div id="recordsSummary" class="stats-grid"></div>
+      <div class="filter-row">
+        <select id="recordsFilter">
           <option value="all">全件</option>
           <option value="verified">検証済み</option>
           <option value="unverified">未検証</option>
         </select>
-        <select id="recordsSort" class="filter-select">
+        <select id="recordsSort">
           <option value="newest">新しい順</option>
           <option value="oldest">古い順</option>
           <option value="bestmatch">一致数順</option>
         </select>
       </div>
-      <div id="recordsList" class="records-list"></div>
+      <div id="recordsList"></div>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。本アプリは当選を保証するものではありません。
+      </div>
     </section>
 
-    <!-- 5. 検証画面 -->
-    <section class="tab-content" id="tabVerify">
-      <div id="latestVerification" class="latest-verification"></div>
-      <button class="btn-primary" id="btnVerify">検証する</button>
-      <div id="verificationStats" class="verification-stats"></div>
-      <div id="learningStatus" class="learning-status"></div>
-      <p class="disclaimer">⚠️ ロト6は完全にランダムな抽選です。本予想は当選を保証するものではありません。</p>
+    <!-- 5. Verify -->
+    <section id="tabVerify" class="tab-content">
+      <button class="btn btn-primary" id="btnVerify" style="margin-bottom:12px">未検証をすべて検証</button>
+      <div id="latestVerification"></div>
+      <div id="verificationStats"></div>
+      <div id="accuracyTrendSection"></div>
+      <div id="learningStatus" class="card"></div>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。本アプリは当選を保証するものではありません。
+      </div>
     </section>
 
-    <!-- 6. 設定画面 -->
-    <section class="tab-content" id="tabSettings">
-      <div class="settings-section">
-        <h2 class="section-title">テーマ</h2>
+    <!-- 6. Backtest -->
+    <section id="tabBacktest" class="tab-content">
+      <div class="card">
+        <h3>バックテスト</h3>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:12px">
+          過去のデータに対して現在のアルゴリズムで予想を生成し、的中率をシミュレーションします。
+        </p>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" id="btnBacktest50" data-n="50">直近50回</button>
+          <button class="btn btn-primary btn-sm" id="btnBacktest100" data-n="100">直近100回</button>
+        </div>
+        <div id="backtestProgress" style="font-size:0.75rem;color:var(--text-muted)"></div>
+      </div>
+      <div id="backtestSummary"></div>
+      <div id="backtestChart" class="card" style="display:none">
+        <h3>一致数推移</h3>
+        <div class="chart-container" style="height:250px"><canvas id="chartBacktest"></canvas></div>
+      </div>
+      <div id="backtestDetails"></div>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。バックテストは過去データに対するシミュレーションであり、将来の結果を保証するものではありません。
+      </div>
+    </section>
+
+    <!-- 7. Settings -->
+    <section id="tabSettings" class="tab-content">
+      <div class="card settings-section">
+        <h3>テーマ</h3>
         <div class="theme-buttons">
           <button class="theme-btn" data-theme="dark">ダーク</button>
-          <button class="theme-btn active" data-theme="light">ライト</button>
-          <button class="theme-btn" data-theme="system">システム</button>
+          <button class="theme-btn" data-theme="light">ライト</button>
+          <button class="theme-btn" data-theme="system">自動</button>
         </div>
       </div>
-      <div class="settings-section">
-        <h2 class="section-title">自動学習</h2>
-        <label class="toggle-label">
-          <span>自動学習を有効にする</span>
-          <input type="checkbox" id="toggleAutoLearn" checked>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">統合戦略の重み調整</h2>
-        <div id="weightsSliders" class="weights-sliders"></div>
-        <div class="weights-actions">
-          <button class="btn-secondary" id="btnApplyLearned">学習値を適用</button>
-          <button class="btn-secondary" id="btnResetWeights">デフォルトに戻す</button>
+
+      <div class="card settings-section">
+        <h3>自動学習</h3>
+        <div class="toggle-row">
+          <span class="toggle-label">検証時に自動学習</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleAutoLearn">
+            <span class="toggle-slider"></span>
+          </label>
         </div>
+        <button class="btn btn-sm btn-secondary" id="btnApplyLearned" style="margin-top:8px">学習済みの値を適用</button>
       </div>
-      <div class="settings-section">
-        <h2 class="section-title">データ管理</h2>
-        <div class="data-info" id="dataInfo"></div>
-        <div class="data-actions">
-          <button class="btn-secondary" id="btnExport">データをエクスポート</button>
-          <button class="btn-secondary" id="btnImport">データをインポート</button>
+
+      <div class="card settings-section">
+        <h3>重み設定（W1〜W12）</h3>
+        <div id="weightsSliders"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-sm btn-secondary" id="btnResetWeights">デフォルトに戻す</button>
+        </div>
+        <div class="chart-container" style="height:200px;margin-top:12px"><canvas id="chartWeights"></canvas></div>
+      </div>
+
+      <div class="card settings-section">
+        <h3>データ管理</h3>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">
+          <div id="dataRange"></div>
+          <div id="dataInfo"></div>
+        </div>
+        <div class="data-buttons">
+          <button class="btn btn-sm btn-secondary" id="btnExport">エクスポート (JSON)</button>
+          <button class="btn btn-sm btn-secondary" id="btnImport">インポート</button>
           <input type="file" id="fileImport" accept=".json" style="display:none">
-          <button class="btn-danger" id="btnResetData">データをリセット</button>
+          <button class="btn btn-sm btn-danger" id="btnResetData">全データリセット</button>
         </div>
       </div>
-      <div class="settings-section">
-        <h2 class="section-title">アプリ情報</h2>
-        <p>バージョン: 1.0.0</p>
-        <p id="dataRange"></p>
-        <div class="disclaimer-full">
-          <p>⚠️ 免責事項</p>
-          <p>ロト6は完全にランダムな抽選です。過去の統計的傾向が将来の結果を予測する根拠にはなりません。本アプリは統計分析に基づく参考値を生成するもので、当選を保証するものではありません。宝くじの購入は自己責任で行ってください。</p>
+
+      <div class="card settings-section">
+        <h3>QRコード同期</h3>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">
+          データをQRコードで別端末に転送します。
+        </p>
+        <button class="btn btn-sm btn-secondary" id="btnShowQR">QRコードを生成</button>
+        <div id="qrDisplay"></div>
+      </div>
+
+      <div class="card settings-section">
+        <h3>アプリ情報</h3>
+        <p style="font-size:0.75rem;color:var(--text-muted)">
+          ロト6 AI予測ラボ v3.0<br>
+          搭載AI: モンテカルロ / 遺伝的アルゴリズム / 焼きなまし法 / エントロピー最適化 / 相関ネットワーク / トレンド追従 / 出遅れ回帰
+        </p>
+        <div class="disclaimer" style="border-top:none;margin-top:8px;text-align:left">
+          免責事項: ロト6は完全にランダムな抽選です。本アプリは統計的な傾向とAIアルゴリズムに基づく参考値を生成するもので、当選を保証するものではありません。宝くじの購入は自己責任でお願いいたします。
         </div>
       </div>
     </section>
   </main>
 
+  <!-- Tab Bar -->
+  <nav class="tab-bar">
+    <button class="tab-item active" data-tab="tabPredict">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      予想
+    </button>
+    <button class="tab-item" data-tab="tabAnalysis">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      分析
+    </button>
+    <button class="tab-item" data-tab="tabHistory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      履歴
+    </button>
+    <button class="tab-item" data-tab="tabRecords">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      記録
+    </button>
+    <button class="tab-item" data-tab="tabVerify">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      検証
+    </button>
+    <button class="tab-item" data-tab="tabBacktest">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      BT
+    </button>
+    <button class="tab-item" data-tab="tabSettings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+      設定
+    </button>
+  </nav>
+
   <!-- Add Draw Modal -->
   <div class="modal-overlay" id="addDrawModal">
-    <div class="modal">
+    <div class="modal-content">
       <div class="modal-header">
         <h2>抽選結果を追加</h2>
         <button class="modal-close" id="modalClose">&times;</button>
       </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>回号</label>
-          <input type="number" id="inputDrawId" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>抽選日</label>
-          <input type="date" id="inputDrawDate" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>本数字（6個選択）</label>
-          <div class="number-grid" id="numberGrid"></div>
-          <div class="selected-nums" id="selectedNums">選択: なし</div>
-        </div>
-        <div class="form-group">
-          <label>ボーナス数字（1個選択）</label>
-          <div class="number-grid bonus-grid" id="bonusGrid"></div>
-          <div class="selected-bonus" id="selectedBonus">選択: なし</div>
-        </div>
-        <div id="formError" class="form-error"></div>
+      <div class="form-row">
+        <label>回号</label>
+        <input type="number" id="inputDrawId" min="1">
       </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="modalCancel">キャンセル</button>
-        <button class="btn-primary" id="modalSave">保存</button>
+      <div class="form-row">
+        <label>抽選日</label>
+        <input type="date" id="inputDrawDate">
+      </div>
+      <div class="form-row">
+        <label>本数字（6個選択）</label>
+        <div class="number-grid" id="numberGrid"></div>
+        <div class="selected-display" id="selectedNums">選択: なし</div>
+      </div>
+      <div class="form-row">
+        <label>ボーナス数字（1個選択）</label>
+        <div class="number-grid" id="bonusGrid"></div>
+        <div class="selected-display" id="selectedBonus">選択: なし</div>
+      </div>
+      <div class="form-error" id="formError"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="modalCancel">キャンセル</button>
+        <button class="btn btn-primary" id="modalSave">保存</button>
       </div>
     </div>
   </div>
 
-  <!-- Tab Bar -->
-  <nav class="tab-bar">
-    <button class="tab-item active" data-tab="tabPredict">
-      <span class="tab-icon">🎯</span>
-      <span class="tab-label">予想</span>
-    </button>
-    <button class="tab-item" data-tab="tabAnalysis">
-      <span class="tab-icon">📊</span>
-      <span class="tab-label">分析</span>
-    </button>
-    <button class="tab-item" data-tab="tabHistory">
-      <span class="tab-icon">📋</span>
-      <span class="tab-label">履歴</span>
-    </button>
-    <button class="tab-item" data-tab="tabRecords">
-      <span class="tab-icon">📝</span>
-      <span class="tab-label">予測記録</span>
-    </button>
-    <button class="tab-item" data-tab="tabVerify">
-      <span class="tab-icon">✅</span>
-      <span class="tab-label">検証</span>
-    </button>
-    <button class="tab-item" data-tab="tabSettings">
-      <span class="tab-icon">⚙️</span>
-      <span class="tab-label">設定</span>
-    </button>
-  </nav>
+  <!-- Ball Detail Popup -->
+  <div class="popup-overlay" id="ballDetailPopup">
+    <div class="popup-content" id="ballDetailContent"></div>
+  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/analyzer.js"></script>
-  <script src="js/predictor.js"></script>
-  <script src="js/verifier.js"></script>
-  <script src="js/learner.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/app.js"></script>
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">AIが予測を生成中...</div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  <script src="./js/data.js"></script>
+  <script src="./js/storage.js"></script>
+  <script src="./js/utils.js"></script>
+  <script src="./js/analyzer.js"></script>
+  <script src="./js/ai-engine.js"></script>
+  <script src="./js/predictor.js"></script>
+  <script src="./js/scheduler.js"></script>
+  <script src="./js/verifier.js"></script>
+  <script src="./js/learner.js"></script>
+  <script src="./js/backtest.js"></script>
+  <script src="./js/charts.js"></script>
+  <script src="./js/app.js"></script>
 </body>
 </html>

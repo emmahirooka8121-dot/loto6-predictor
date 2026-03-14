@@ -1,11 +1,13 @@
-/* ===== Main Application ===== */
+/* ===== Main Application (v3 Enhanced - All 7 Tabs) ===== */
 
 const App = (() => {
+  'use strict';
+
   let currentTab = 'tabPredict';
   let historyPage = 0;
   const HISTORY_PAGE_SIZE = 20;
 
-  /* --- Initialization --- */
+  /* ---------- Init ---------- */
   function init() {
     applyTheme();
     renderHeader();
@@ -14,49 +16,60 @@ const App = (() => {
     bindHistoryEvents();
     bindRecordsEvents();
     bindVerifyEvents();
+    bindBacktestEvents();
     bindSettingsEvents();
+
+    // Scheduler check
+    Scheduler.checkExpiry();
+    Scheduler.tryAutoGenerate();
+
     renderCurrentTab();
 
-    // Register service worker
+    // Service Worker
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      navigator.serviceWorker.register('./sw.js').catch(function() {});
     }
+
+    // Pull-to-refresh (Improvement 11)
+    initPullToRefresh();
   }
 
-  /* --- Theme --- */
+  /* ---------- Theme ---------- */
   function applyTheme() {
-    const settings = Storage.getSettings();
-    let theme = settings.theme || 'dark';
+    var settings = Storage.getSettings();
+    var theme = settings.theme || 'dark';
     if (theme === 'system') {
       theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
     }
     document.body.setAttribute('data-theme', theme);
-    // Update active button
-    document.querySelectorAll('.theme-btn').forEach(btn => {
+    document.querySelectorAll('.theme-btn').forEach(function(btn) {
       btn.classList.toggle('active', btn.dataset.theme === settings.theme);
     });
   }
 
-  /* --- Header --- */
+  /* ---------- Header ---------- */
   function renderHeader() {
-    const info = Utils.nextDrawInfo();
-    document.getElementById('nextDrawInfo').textContent =
-      `次回: 第${info.id}回 ${info.formatted}（${info.weekday}）`;
+    var info = Utils.nextDrawInfo();
+    var el = document.getElementById('nextDrawInfo');
+    if (el) el.textContent = '次回第' + info.id + '回 ' + info.formatted;
   }
 
-  /* --- Tab Navigation --- */
+  /* ---------- Tabs ---------- */
   function bindTabEvents() {
-    document.querySelectorAll('.tab-item').forEach(btn => {
-      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    document.querySelectorAll('.tab-item').forEach(function(btn) {
+      btn.addEventListener('click', function() { switchTab(btn.dataset.tab); });
     });
   }
 
   function switchTab(tabId) {
     currentTab = tabId;
-    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
-    document.getElementById(tabId)?.classList.add('active');
-    document.querySelector(`[data-tab="${tabId}"]`)?.classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
+    document.querySelectorAll('.tab-item').forEach(function(el) { el.classList.remove('active'); });
+    var tabEl = document.getElementById(tabId);
+    if (tabEl) tabEl.classList.add('active');
+    var tabBtn = document.querySelector('[data-tab="' + tabId + '"]');
+    if (tabBtn) tabBtn.classList.add('active');
+    Charts.destroyAll();
     renderCurrentTab();
   }
 
@@ -67,261 +80,395 @@ const App = (() => {
       case 'tabHistory': renderHistory(); break;
       case 'tabRecords': renderRecords(); break;
       case 'tabVerify': renderVerify(); break;
+      case 'tabBacktest': renderBacktest(); break;
       case 'tabSettings': renderSettings(); break;
     }
   }
 
-  /* ===== 1. Predict Tab ===== */
+  /* ========== 1. PREDICT TAB ========== */
   function bindPredictEvents() {
-    document.getElementById('btnGenerate').addEventListener('click', () => {
-      const data = Utils.getAllDrawData();
-      if (data.length === 0) {
-        alert('抽選データがありません。');
+    document.getElementById('btnGenerate').addEventListener('click', function() {
+      if (Scheduler.isLocked()) {
+        Utils.showToast('予測はロック中です');
         return;
       }
-      Predictor.generate(data);
-      renderPredict();
+      doGenerate(false);
     });
+
+    document.getElementById('btnAdvanced').addEventListener('click', function() {
+      if (Scheduler.isLocked()) {
+        if (!confirm('ロック中ですが、高度探索で上書きしますか？')) return;
+      }
+      doGenerate(true);
+    });
+  }
+
+  function doGenerate(advanced) {
+    var data = Utils.getAllDrawData();
+    if (data.length === 0) { alert('抽選データがありません。'); return; }
+
+    var overlay = document.getElementById('loadingOverlay');
+    var loadText = document.getElementById('loadingText');
+    overlay.classList.add('active');
+    loadText.textContent = advanced ? 'AI高度探索モードで解析中...' : 'AIが予測を生成中...';
+
+    Utils.hapticFeedback();
+
+    setTimeout(function() {
+      try {
+        if (advanced && Scheduler.isLocked()) {
+          Scheduler.forceOverride(data);
+        } else {
+          Predictor.generate(data, advanced);
+        }
+      } catch (e) {
+        console.error(e);
+        alert('予測生成中にエラーが発生しました。');
+      }
+      overlay.classList.remove('active');
+      Utils.hapticFeedback();
+      renderPredict();
+    }, 100);
   }
 
   function renderPredict() {
-    const predictions = Storage.getPredictions();
-    const container = document.getElementById('predictionsDisplay');
+    // Dashboard widgets (Improvement 13)
+    renderDashboardWidgets();
+    // Scheduler status
+    renderSchedulerStatus();
+
+    var predictions = Storage.getPredictions();
+    var container = document.getElementById('predictionsDisplay');
+
+    // Algorithm tags
+    var tagsEl = document.getElementById('algoTags');
+    tagsEl.innerHTML = ['モンテカルロ', '遺伝的アルゴリズム', '焼きなまし法', 'エントロピー最適化', '相関ネットワーク', 'トレンド追従', '出遅れ回帰']
+      .map(function(t) { return '<span class="algo-tag">' + t + '</span>'; }).join('');
 
     if (predictions.length === 0) {
-      container.innerHTML = `
-        <div class="target-draw-info">下のボタンをタップして予想番号を生成してください</div>
-      `;
+      container.innerHTML = '<div class="card" style="text-align:center;padding:32px"><p style="color:var(--text-muted)">下のボタンをタップして予想番号を生成してください</p></div>';
       return;
     }
 
-    const latest = predictions[0];
-    const learningStatus = Learner.getStatus();
+    var latest = predictions[0];
+    var html = '<div class="card"><h3>第' + latest.targetDrawId + '回 ' + Utils.formatDate(latest.targetDate) + '（' + latest.targetWeekday + '）抽選分</h3>';
+    html += '<div style="font-size:0.7rem;color:var(--text-muted)">生成: ' + Utils.formatDateTime(latest.createdAt) + ' / モード: ' + (latest.mode === 'advanced' ? '高度探索' : '通常') + ' / カバー率: ' + (latest.coverage || '-') + '/43</div></div>';
 
-    let html = `
-      <div class="target-draw-info">
-        対象: 第${latest.targetDrawId}回 ${Utils.formatDate(latest.targetDate)}（${latest.targetWeekday}）抽選分
-      </div>
-    `;
+    latest.sets.forEach(function(set, i) {
+      var name = Predictor.STRATEGY_NAMES[set.strategy] || set.strategy;
+      var sum = Utils.calcSum(set.nums);
+      var oe = Utils.calcOddEvenStr(set.nums);
+      var conf = set.confidence || 0;
+      var confClass = conf >= 70 ? 'confidence-high' : conf >= 50 ? 'confidence-mid' : 'confidence-low';
+      var numsText = set.nums.map(function(n) { return String(n).padStart(2, '0'); }).join(' ');
 
-    latest.sets.forEach((set, i) => {
-      const name = Predictor.STRATEGY_NAMES[set.strategy] || set.strategy;
-      const sum = Utils.calcSum(set.nums);
-      const oe = Utils.calcOddEven(set.nums);
-      html += `
-        <div class="prediction-card ${set.strategy}" style="animation-delay: ${i * 0.05}s">
-          <div class="prediction-card-header">
-            <span class="strategy-name">${['①','②','③','④','⑤'][i]} ${name}</span>
-            <span class="prediction-meta">合計:${sum} 奇偶:${oe}</span>
-          </div>
-          <div class="prediction-balls">${Utils.renderBalls(set.nums, { animate: true })}</div>
-          <div class="prediction-meta">生成日時: ${Utils.formatDateTime(latest.createdAt)}</div>
-          ${set.strategy === 'composite' ? `
-            <div class="learning-info">
-              学習回数: ${learningStatus.learningCount}回
-              ${learningStatus.bestStrategy ? ` / 最優秀: ${Predictor.STRATEGY_NAMES[learningStatus.bestStrategy]}（平均${learningStatus.bestStrategyAvg?.toFixed(1) || '-'}個）` : ''}
-            </div>
-          ` : ''}
-        </div>
-      `;
+      html += '<div class="prediction-card" style="animation-delay:' + (i * 0.08) + 's">';
+      html += '<div class="prediction-card-header">';
+      html += '<span class="strategy-label">' + ['①','②','③','④','⑤'][i] + ' ' + name + '</span>';
+      html += '<span class="confidence-badge ' + confClass + '">確信度 ' + conf + '%</span>';
+      html += '</div>';
+      html += '<div class="balls-row">' + Utils.renderBalls(set.nums, { animate: true, clickable: true }) + '</div>';
+      html += '<div class="prediction-meta">合計: ' + sum + ' / 奇偶: ' + oe + (set.algo ? ' / Algo: ' + set.algo : '') + '</div>';
+
+      // Copyable textarea (required spec)
+      html += Utils.renderCopyableTextarea(numsText, 'copy_pred_' + i);
+
+      // Copy button + Mark sheet
+      html += '<div class="prediction-actions">';
+      html += '<button class="btn-copy" onclick="Utils.copyToClipboard(\'' + numsText + '\')">番号をコピー</button>';
+      html += '</div>';
+      html += Utils.renderMarkSheet(set.nums);
+      html += '</div>';
     });
 
     container.innerHTML = html;
+
+    // Update generate button state
+    var locked = Scheduler.isLocked();
+    document.getElementById('btnGenerate').disabled = locked;
   }
 
-  /* ===== 2. Analysis Tab ===== */
+  function renderDashboardWidgets() {
+    var el = document.getElementById('dashboardWidgets');
+    var info = Utils.nextDrawInfo();
+    var learningStatus = Learner.getStatus();
+    var predictions = Storage.getPredictions();
+
+    el.innerHTML =
+      '<div class="widget-card"><div class="widget-value">' + info.daysUntil + '日</div><div class="widget-label">次回抽選まで</div></div>' +
+      '<div class="widget-card"><div class="widget-value">' + learningStatus.learningCount + '回</div><div class="widget-label">学習回数</div></div>' +
+      '<div class="widget-card"><div class="widget-value">' + (learningStatus.maxMatch || 0) + '個</div><div class="widget-label">最高一致</div></div>' +
+      '<div class="widget-card"><div class="widget-value">' + predictions.length + '回</div><div class="widget-label">累計予測</div></div>';
+  }
+
+  function renderSchedulerStatus() {
+    var status = Scheduler.getLockStatus();
+    var statusEl = document.getElementById('schedulerStatus');
+    var bannerEl = document.getElementById('lockBanner');
+
+    statusEl.innerHTML = '<span class="status-dot ' + status.color + '"></span><span>' + status.label + ': ' + status.message + '</span>';
+
+    if (status.status === 'locked') {
+      bannerEl.innerHTML = '<div class="lock-banner">この予測は' + (status.lockTime ? Utils.formatDateTime(status.lockTime) : '') + 'にロックされました。解除予定: ' + (status.unlockTime ? Utils.formatDateTime(status.unlockTime) : '') + '</div>';
+    } else {
+      bannerEl.innerHTML = '';
+    }
+  }
+
+  /* ========== 2. ANALYSIS TAB ========== */
   function renderAnalysis(period) {
-    const data = Utils.getAllDrawData();
+    var data = Utils.getAllDrawData();
     if (data.length === 0) {
       document.getElementById('analysisContent').innerHTML = '<p style="text-align:center;color:var(--text-muted)">データがありません</p>';
       return;
     }
 
-    period = period || parseInt(document.querySelector('.period-btn.active')?.dataset?.period) || 10;
-    if (isNaN(period)) period = 'all';
+    period = period || parseInt(document.querySelector('.period-btn.active').dataset.period) || 10;
+    if (isNaN(period)) period = null;
 
-    const analysis = Analyzer.fullAnalysis(data, period === 'all' ? null : period);
-    const content = document.getElementById('analysisContent');
+    var analysis = Analyzer.fullAnalysis(data, period === 'all' ? null : period);
+    var content = document.getElementById('analysisContent');
 
-    content.innerHTML = `
-      <div class="analysis-card">
-        <h3>出現頻度（${period === 'all' ? '全期間' : '直近' + period + '回'}）</h3>
-        <div class="chart-container" style="height:${43 * 18}px"><canvas id="chartFreq"></canvas></div>
-      </div>
-      <div class="analysis-card">
-        <h3>番号帯分布</h3>
-        <div class="chart-container" style="height:250px"><canvas id="chartRange"></canvas></div>
-      </div>
-      <div class="analysis-card">
-        <h3>奇数・偶数パターン</h3>
-        <div class="chart-container" style="height:200px"><canvas id="chartOE"></canvas></div>
-      </div>
-      <div class="analysis-card">
-        <h3>合計値ヒストグラム（平均: ${analysis.sumStats.mean || '-'} / 中央値: ${analysis.sumStats.median || '-'}）</h3>
-        <div class="chart-container" style="height:200px"><canvas id="chartSum"></canvas></div>
-      </div>
-      <div class="analysis-card">
-        <h3>出遅れ番号 TOP10</h3>
-        <ul class="dormancy-list">${renderDormancyList(analysis.dormancy)}</ul>
-      </div>
-      <div class="analysis-card">
-        <h3>よく一緒に出る番号ペア TOP10</h3>
-        <ul class="correlation-list">${renderCorrelationList(analysis.correlation)}</ul>
-      </div>
-      <div class="analysis-card">
-        <h3>月曜 vs 木曜の傾向</h3>
-        <p style="font-size:0.8rem;color:var(--text-muted)">
-          月曜データ: ${analysis.weekdayTrend.monday?.count || 0}回 / 木曜データ: ${analysis.weekdayTrend.thursday?.count || 0}回
-        </p>
-        ${renderWeekdayDiff(analysis.weekdayTrend)}
-      </div>
-    `;
+    var html = '';
+
+    // (a) Frequency chart
+    html += '<div class="card"><h3>出現頻度</h3><div class="chart-container" style="height:' + (43 * 18) + 'px"><canvas id="chartFreq"></canvas></div></div>';
+
+    // (b) Heatmap (Improvement 17)
+    html += '<div class="card"><h3>番号ヒートマップ</h3>' + renderHeatmap(analysis.frequency) + '</div>';
+
+    // (c) Range chart
+    html += '<div class="card"><h3>番号帯分布</h3><div class="chart-container" style="height:250px"><canvas id="chartRange"></canvas></div></div>';
+
+    // (d) Odd/Even
+    html += '<div class="card"><h3>奇偶パターン</h3><div class="chart-container" style="height:200px"><canvas id="chartOE"></canvas></div></div>';
+
+    // (e) Sum histogram
+    html += '<div class="card"><h3>合計値ヒストグラム（平均: ' + (analysis.sumStats.mean || '-') + '）</h3><div class="chart-container" style="height:200px"><canvas id="chartSum"></canvas></div></div>';
+
+    // (f) Dormancy ranking
+    html += '<div class="card"><h3>出遅れランキング TOP10</h3><ul class="dormancy-list">' + renderDormancyList(analysis.dormancy) + '</ul></div>';
+
+    // (g) Pairs + Triplets (Improvement 6)
+    html += '<div class="card"><h3>番号ペア TOP10</h3><ul class="correlation-list">' + renderCorrelationList(analysis.correlation) + '</ul>';
+    html += '<h3 style="margin-top:12px">トリプレット TOP5</h3><ul class="correlation-list">' + renderTripletList(analysis.triplets) + '</ul></div>';
+
+    // (h) Weekday
+    html += '<div class="card"><h3>月曜 vs 木曜の傾向</h3><p style="font-size:0.75rem;color:var(--text-muted)">月曜: ' + (analysis.weekdayTrend.monday.count || 0) + '回 / 木曜: ' + (analysis.weekdayTrend.thursday.count || 0) + '回</p>' + renderWeekdayDiff(analysis.weekdayTrend) + '</div>';
+
+    // (i) Consecutive (Improvement 2)
+    html += '<div class="card"><h3>連番パターン分析</h3><p style="font-size:0.8rem">連番出現率: <strong>' + (analysis.consecutive.rate * 100).toFixed(1) + '%</strong>（' + analysis.consecutive.withConsec + '/' + analysis.consecutive.total + '回）</p>';
+    if (analysis.consecutive.topPairs.length > 0) {
+      html += '<ul class="dormancy-list">' + analysis.consecutive.topPairs.slice(0, 5).map(function(p) {
+        var nums = p.pair.split('-').map(Number);
+        return '<li><span>' + Utils.renderBall(nums[0]) + Utils.renderBall(nums[1]) + '</span><span style="font-family:var(--font-mono);font-weight:700">' + p.count + '回</span></li>';
+      }).join('') + '</ul>';
+    }
+    html += '</div>';
+
+    // (j) Last digit (Improvement 3)
+    html += '<div class="card"><h3>末尾数字分布</h3><div class="chart-container" style="height:200px"><canvas id="chartLastDigit"></canvas></div></div>';
+
+    // (k) Interval distribution (Improvement 4)
+    html += '<div class="card"><h3>出現間隔分析（次回出現確率 TOP10）</h3>' + renderIntervalTop(analysis.intervalDist) + '</div>';
+
+    // (l) Hot/Cold (Improvement 5)
+    html += '<div class="card"><h3>温冷サイクル</h3>' + renderHotCold(analysis.hotCold) + '</div>';
+
+    content.innerHTML = html;
 
     // Render charts after DOM update
-    requestAnimationFrame(() => {
+    requestAnimationFrame(function() {
       Charts.renderFrequencyChart('chartFreq', analysis.frequency);
       Charts.renderRangeChart('chartRange', analysis.rangeDist);
       Charts.renderOddEvenChart('chartOE', analysis.oddEven);
       Charts.renderSumHistogram('chartSum', analysis.sumStats);
+      Charts.renderLastDigitChart('chartLastDigit', analysis.lastDigit);
     });
 
-    // Bind period buttons
-    document.querySelectorAll('.period-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+    // Period button binding
+    document.querySelectorAll('.period-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.period-btn').forEach(function(b) { b.classList.remove('active'); });
         btn.classList.add('active');
         Charts.destroyAll();
-        const p = btn.dataset.period;
+        var p = btn.dataset.period;
         renderAnalysis(p === 'all' ? 'all' : parseInt(p));
       });
     });
   }
 
+  function renderHeatmap(frequency) {
+    var maxCount = Math.max.apply(null, Object.values(frequency).map(function(f) { return f.count; }));
+    var html = '<div class="heatmap-grid">';
+    for (var n = 1; n <= 43; n++) {
+      var count = frequency[n] ? frequency[n].count : 0;
+      var intensity = maxCount > 0 ? count / maxCount : 0;
+      var r = Math.round(59 + intensity * 180);
+      var g = Math.round(59 - intensity * 30);
+      var b = Math.round(59 - intensity * 40);
+      var bg = 'rgb(' + r + ',' + g + ',' + b + ')';
+      html += '<div class="heatmap-cell" style="background:' + bg + '" title="番号' + n + ': ' + count + '回">' + String(n).padStart(2, '0') + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
   function renderDormancyList(dormancy) {
-    if (!dormancy || Object.keys(dormancy).length === 0) return '<li>データなし</li>';
+    if (!dormancy) return '<li>データなし</li>';
     return Object.entries(dormancy)
-      .sort((a,b) => b[1] - a[1])
+      .sort(function(a, b) { return b[1] - a[1]; })
       .slice(0, 10)
-      .map(([num, count]) => `
-        <li>
-          <span>${Utils.renderBall(parseInt(num))} 番号 ${num}</span>
-          <span style="font-family:'JetBrains Mono';font-weight:700">${count}回不出</span>
-        </li>
-      `).join('');
+      .map(function(entry) {
+        return '<li><span>' + Utils.renderBall(parseInt(entry[0])) + ' 番号' + entry[0] + '</span><span style="font-family:var(--font-mono);font-weight:700">' + entry[1] + '回不出</span></li>';
+      }).join('');
   }
 
   function renderCorrelationList(correlation) {
     if (!correlation || correlation.length === 0) return '<li>データなし</li>';
-    return correlation.slice(0, 10).map(({pair, count}) => {
-      const [a, b] = pair.split('-').map(Number);
-      return `<li><span>${Utils.renderBall(a)}${Utils.renderBall(b)}</span><span style="font-family:'JetBrains Mono';font-weight:700">${count}回</span></li>`;
+    return correlation.slice(0, 10).map(function(item) {
+      var nums = item.pair.split('-').map(Number);
+      return '<li><span>' + Utils.renderBall(nums[0]) + Utils.renderBall(nums[1]) + '</span><span style="font-family:var(--font-mono);font-weight:700">' + item.count + '回</span></li>';
+    }).join('');
+  }
+
+  function renderTripletList(triplets) {
+    if (!triplets || triplets.length === 0) return '<li>データなし</li>';
+    return triplets.slice(0, 5).map(function(item) {
+      var nums = item.triplet.split('-').map(Number);
+      return '<li><span>' + nums.map(function(n) { return Utils.renderBall(n); }).join('') + '</span><span style="font-family:var(--font-mono);font-weight:700">' + item.count + '回</span></li>';
     }).join('');
   }
 
   function renderWeekdayDiff(wt) {
-    if (!wt.monday?.frequency || !wt.thursday?.frequency) return '<p style="font-size:0.8rem;color:var(--text-muted)">データ不足</p>';
-    const diffs = [];
-    for (let n = 1; n <= 43; n++) {
-      const monRate = wt.monday.frequency[n]?.rate || 0;
-      const thuRate = wt.thursday.frequency[n]?.rate || 0;
-      const diff = monRate - thuRate;
-      if (Math.abs(diff) > 0.03) {
-        diffs.push({num: n, diff, monRate, thuRate});
-      }
+    if (!wt.monday.frequency || !wt.thursday.frequency) return '<p style="font-size:0.75rem;color:var(--text-muted)">データ不足</p>';
+    var diffs = [];
+    for (var n = 1; n <= 43; n++) {
+      var mr = wt.monday.frequency[n] ? wt.monday.frequency[n].rate : 0;
+      var tr = wt.thursday.frequency[n] ? wt.thursday.frequency[n].rate : 0;
+      var diff = mr - tr;
+      if (Math.abs(diff) > 0.03) diffs.push({ num: n, diff: diff });
     }
-    if (diffs.length === 0) return '<p style="font-size:0.8rem;color:var(--text-muted)">目立った差はありません</p>';
-    diffs.sort((a,b) => Math.abs(b.diff) - Math.abs(a.diff));
-    return `<ul class="dormancy-list">${diffs.slice(0, 8).map(({num, diff}) => `
-      <li>
-        <span>${Utils.renderBall(num)} 番号${num}</span>
-        <span style="color:${diff > 0 ? 'var(--hot)' : 'var(--cold)'}">
-          ${diff > 0 ? '月曜+' : '木曜+'}${(Math.abs(diff)*100).toFixed(1)}%
-        </span>
-      </li>
-    `).join('')}</ul>`;
+    if (diffs.length === 0) return '<p style="font-size:0.75rem;color:var(--text-muted)">目立った差なし</p>';
+    diffs.sort(function(a, b) { return Math.abs(b.diff) - Math.abs(a.diff); });
+    return '<ul class="dormancy-list">' + diffs.slice(0, 8).map(function(d) {
+      var label = d.diff > 0 ? '月曜+' : '木曜+';
+      var color = d.diff > 0 ? 'var(--hot)' : 'var(--cold)';
+      return '<li><span>' + Utils.renderBall(d.num) + '</span><span style="color:' + color + '">' + label + (Math.abs(d.diff) * 100).toFixed(1) + '%</span></li>';
+    }).join('') + '</ul>';
   }
 
-  /* ===== 3. History Tab ===== */
+  function renderIntervalTop(intervalDist) {
+    if (!intervalDist) return '<p style="color:var(--text-muted)">データなし</p>';
+    var items = [];
+    for (var n = 1; n <= 43; n++) {
+      if (intervalDist[n] && intervalDist[n].probNext) {
+        items.push({ num: n, prob: intervalDist[n].probNext, avgInt: intervalDist[n].avgInterval, dormancy: intervalDist[n].dormancy });
+      }
+    }
+    items.sort(function(a, b) { return b.prob - a.prob; });
+    return '<ul class="dormancy-list">' + items.slice(0, 10).map(function(item) {
+      return '<li><span>' + Utils.renderBall(item.num) + ' 番号' + item.num + '</span><span style="font-family:var(--font-mono);font-size:0.75rem">' + (item.prob * 100).toFixed(1) + '% (平均' + (item.avgInt ? item.avgInt.toFixed(1) : '-') + '回間隔)</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderHotCold(hotCold) {
+    if (!hotCold) return '<p style="color:var(--text-muted)">データなし</p>';
+    var hot = [], cold = [];
+    for (var n = 1; n <= 43; n++) {
+      if (hotCold[n]) {
+        if (hotCold[n].state === 'hot') hot.push(n);
+        else if (hotCold[n].state === 'cold') cold.push(n);
+      }
+    }
+    return '<div style="margin-bottom:8px"><span class="tag-hot">HOT: </span>' + (hot.length > 0 ? hot.map(function(n) { return Utils.renderBall(n); }).join('') : 'なし') + '</div>' +
+           '<div><span class="tag-cold">COLD: </span>' + (cold.length > 0 ? cold.map(function(n) { return Utils.renderBall(n); }).join('') : 'なし') + '</div>';
+  }
+
+  /* ========== 3. HISTORY TAB ========== */
   function bindHistoryEvents() {
-    document.getElementById('historySearch').addEventListener('input', (e) => {
+    document.getElementById('historySearch').addEventListener('input', function(e) {
       historyPage = 0;
       renderHistory(e.target.value.trim());
     });
     document.getElementById('btnAddDraw').addEventListener('click', openAddDrawModal);
-    document.getElementById('btnLoadMore').addEventListener('click', () => {
+    document.getElementById('btnLoadMore').addEventListener('click', function() {
       historyPage++;
       appendHistory();
     });
+    document.getElementById('btnFetchResult').addEventListener('click', tryFetchResult);
   }
 
   function renderHistory(searchNum) {
-    const data = Utils.getAllDrawData();
-    let filtered = data;
+    var data = Utils.getAllDrawData();
+    var filtered = data;
     if (searchNum && !isNaN(parseInt(searchNum))) {
-      const num = parseInt(searchNum);
-      filtered = data.filter(d => d.nums.includes(num) || d.bonus === num);
+      var num = parseInt(searchNum);
+      filtered = data.filter(function(d) { return d.nums.indexOf(num) >= 0 || d.bonus === num; });
     }
 
     // Latest draw
-    const latestEl = document.getElementById('latestDraw');
+    var latestEl = document.getElementById('latestDraw');
     if (data.length > 0) {
-      const d = data[0];
-      latestEl.innerHTML = `
-        <div class="draw-label">最新: 第${d.id}回 ${Utils.formatDate(d.date)}（${Utils.getWeekday(d.date)}）</div>
-        <div class="prediction-balls">
-          ${Utils.renderBalls(d.nums)}
-          ${Utils.renderBall(d.bonus, { bonus: true })}
-        </div>
-      `;
+      var d = data[0];
+      latestEl.innerHTML = '<h3>最新: 第' + d.id + '回 ' + Utils.formatDate(d.date) + '（' + Utils.getWeekday(d.date) + '）</h3>' +
+        '<div class="balls-row">' + Utils.renderBalls(d.nums, { clickable: true }) + Utils.renderBall(d.bonus, { bonus: true }) + '</div>';
     } else {
       latestEl.innerHTML = '<p style="color:var(--text-muted)">データなし</p>';
     }
 
-    // History list
     historyPage = 0;
-    const list = document.getElementById('historyList');
-    const page = filtered.slice(0, HISTORY_PAGE_SIZE);
-    list.innerHTML = page.map(d => renderDrawRow(d)).join('');
-    document.getElementById('btnLoadMore').style.display =
-      filtered.length > HISTORY_PAGE_SIZE ? 'block' : 'none';
+    var list = document.getElementById('historyList');
+    var page = filtered.slice(0, HISTORY_PAGE_SIZE);
+    list.innerHTML = page.map(renderDrawRow).join('');
+    document.getElementById('btnLoadMore').style.display = filtered.length > HISTORY_PAGE_SIZE ? 'block' : 'none';
   }
 
   function appendHistory() {
-    const data = Utils.getAllDrawData();
-    const search = document.getElementById('historySearch').value.trim();
-    let filtered = data;
+    var data = Utils.getAllDrawData();
+    var search = document.getElementById('historySearch').value.trim();
+    var filtered = data;
     if (search && !isNaN(parseInt(search))) {
-      filtered = data.filter(d => d.nums.includes(parseInt(search)));
+      var num = parseInt(search);
+      filtered = data.filter(function(d) { return d.nums.indexOf(num) >= 0; });
     }
-    const start = historyPage * HISTORY_PAGE_SIZE;
-    const page = filtered.slice(start, start + HISTORY_PAGE_SIZE);
-    const list = document.getElementById('historyList');
-    list.innerHTML += page.map(d => renderDrawRow(d)).join('');
-    document.getElementById('btnLoadMore').style.display =
-      start + HISTORY_PAGE_SIZE < filtered.length ? 'block' : 'none';
+    var start = historyPage * HISTORY_PAGE_SIZE;
+    var page = filtered.slice(start, start + HISTORY_PAGE_SIZE);
+    document.getElementById('historyList').innerHTML += page.map(renderDrawRow).join('');
+    document.getElementById('btnLoadMore').style.display = start + HISTORY_PAGE_SIZE < filtered.length ? 'block' : 'none';
   }
 
   function renderDrawRow(d) {
-    return `
-      <div class="draw-row">
-        <span class="draw-id">#${d.id}</span>
-        <span class="draw-date">${Utils.formatDate(d.date)}</span>
-        <span class="draw-balls">
-          ${d.nums.map(n => Utils.renderBall(n)).join('')}
-          ${Utils.renderBall(d.bonus, { bonus: true })}
-        </span>
-      </div>
-    `;
+    return '<div class="draw-row"><span class="draw-id">#' + d.id + '</span><span class="draw-date">' + Utils.formatDate(d.date) + '(' + Utils.getWeekday(d.date) + ')</span><span class="draw-balls">' + d.nums.map(function(n) { return Utils.renderBall(n); }).join('') + Utils.renderBall(d.bonus, { bonus: true }) + '</span></div>';
+  }
+
+  // Auto-fetch result (Improvement 19)
+  function tryFetchResult() {
+    Utils.showToast('結果を取得中...');
+    // Try CORS-friendly endpoint
+    fetch('https://www.mk-mode.com/rails/loto/loto6/latest.json')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.id && data.nums) {
+          Storage.saveUserDraw(data);
+          Verifier.verifyAll();
+          renderHistory();
+          Utils.showToast('最新結果を取得しました');
+        }
+      })
+      .catch(function() {
+        Utils.showToast('自動取得に失敗。手動で追加してください。');
+      });
   }
 
   /* --- Add Draw Modal --- */
-  let selectedNums = [];
-  let selectedBonus = null;
+  var selectedNums = [];
+  var selectedBonus = null;
 
   function openAddDrawModal() {
-    const modal = document.getElementById('addDrawModal');
-    const data = Utils.getAllDrawData();
-    const nextId = data.length > 0 ? data[0].id + 1 : 1;
+    var modal = document.getElementById('addDrawModal');
+    var data = Utils.getAllDrawData();
+    var nextId = data.length > 0 ? data[0].id + 1 : 1;
     document.getElementById('inputDrawId').value = nextId;
     document.getElementById('inputDrawDate').value = new Date().toISOString().split('T')[0];
     selectedNums = [];
@@ -331,38 +478,34 @@ const App = (() => {
     document.getElementById('formError').textContent = '';
     modal.classList.add('active');
 
-    document.getElementById('modalClose').onclick = () => modal.classList.remove('active');
-    document.getElementById('modalCancel').onclick = () => modal.classList.remove('active');
+    document.getElementById('modalClose').onclick = function() { modal.classList.remove('active'); };
+    document.getElementById('modalCancel').onclick = function() { modal.classList.remove('active'); };
     document.getElementById('modalSave').onclick = saveNewDraw;
   }
 
   function renderNumberGrids() {
-    const grid = document.getElementById('numberGrid');
-    const bonusGrid = document.getElementById('bonusGrid');
+    var grid = document.getElementById('numberGrid');
+    var bonusGrid = document.getElementById('bonusGrid');
     grid.innerHTML = '';
     bonusGrid.innerHTML = '';
-
-    for (let n = 1; n <= 43; n++) {
-      // Main grid
-      const btn = document.createElement('button');
-      btn.textContent = n;
-      btn.addEventListener('click', () => toggleNumber(n));
-      grid.appendChild(btn);
-
-      // Bonus grid
-      const bBtn = document.createElement('button');
-      bBtn.textContent = n;
-      bBtn.addEventListener('click', () => toggleBonus(n));
-      bonusGrid.appendChild(bBtn);
+    for (var n = 1; n <= 43; n++) {
+      (function(num) {
+        var btn = document.createElement('button');
+        btn.textContent = num;
+        btn.addEventListener('click', function() { toggleNumber(num); });
+        grid.appendChild(btn);
+        var bBtn = document.createElement('button');
+        bBtn.textContent = num;
+        bBtn.addEventListener('click', function() { toggleBonus(num); });
+        bonusGrid.appendChild(bBtn);
+      })(n);
     }
   }
 
   function toggleNumber(n) {
-    if (selectedNums.includes(n)) {
-      selectedNums = selectedNums.filter(x => x !== n);
-    } else if (selectedNums.length < 6) {
-      selectedNums.push(n);
-    }
+    var idx = selectedNums.indexOf(n);
+    if (idx >= 0) selectedNums.splice(idx, 1);
+    else if (selectedNums.length < 6) selectedNums.push(n);
     updateNumberGridUI();
     updateSelectedDisplay();
   }
@@ -374,252 +517,192 @@ const App = (() => {
   }
 
   function updateNumberGridUI() {
-    document.querySelectorAll('#numberGrid button').forEach((btn, i) => {
-      const n = i + 1;
-      btn.classList.toggle('selected', selectedNums.includes(n));
-      btn.classList.toggle('disabled-num', selectedNums.length >= 6 && !selectedNums.includes(n));
+    document.querySelectorAll('#numberGrid button').forEach(function(btn, i) {
+      var n = i + 1;
+      btn.classList.toggle('selected', selectedNums.indexOf(n) >= 0);
+      btn.classList.toggle('disabled-num', selectedNums.length >= 6 && selectedNums.indexOf(n) < 0);
     });
-    document.querySelectorAll('#bonusGrid button').forEach((btn, i) => {
-      const n = i + 1;
+    document.querySelectorAll('#bonusGrid button').forEach(function(btn, i) {
+      var n = i + 1;
       btn.classList.toggle('selected', selectedBonus === n);
     });
   }
 
   function updateSelectedDisplay() {
-    document.getElementById('selectedNums').textContent =
-      selectedNums.length > 0 ? `選択: ${selectedNums.sort((a,b)=>a-b).join(', ')} (${selectedNums.length}/6)` : '選択: なし';
-    document.getElementById('selectedBonus').textContent =
-      selectedBonus ? `選択: ${selectedBonus}` : '選択: なし';
+    var sorted = selectedNums.slice().sort(function(a, b) { return a - b; });
+    document.getElementById('selectedNums').textContent = selectedNums.length > 0 ? '選択: ' + sorted.join(', ') + ' (' + selectedNums.length + '/6)' : '選択: なし';
+    document.getElementById('selectedBonus').textContent = selectedBonus ? '選択: ' + selectedBonus : '選択: なし';
   }
 
   function saveNewDraw() {
-    const id = parseInt(document.getElementById('inputDrawId').value);
-    const date = document.getElementById('inputDrawDate').value;
-    const errEl = document.getElementById('formError');
-
+    var id = parseInt(document.getElementById('inputDrawId').value);
+    var date = document.getElementById('inputDrawDate').value;
+    var errEl = document.getElementById('formError');
     if (!id || id < 1) { errEl.textContent = '回号を入力してください'; return; }
     if (!date) { errEl.textContent = '日付を入力してください'; return; }
     if (selectedNums.length !== 6) { errEl.textContent = '本数字を6個選択してください'; return; }
     if (selectedBonus === null) { errEl.textContent = 'ボーナス数字を選択してください'; return; }
-    if (selectedNums.includes(selectedBonus)) { errEl.textContent = 'ボーナス数字は本数字と異なる必要があります'; return; }
+    if (selectedNums.indexOf(selectedBonus) >= 0) { errEl.textContent = 'ボーナス数字は本数字と異なる必要があります'; return; }
 
-    const draw = {
-      id,
-      date,
-      nums: [...selectedNums].sort((a,b) => a-b),
+    var draw = {
+      id: id,
+      date: date,
+      nums: selectedNums.slice().sort(function(a, b) { return a - b; }),
       bonus: selectedBonus,
     };
-
     Storage.saveUserDraw(draw);
-
-    // Auto-verify any unverified predictions for this draw
-    const verified = Verifier.verifyAll();
-
+    var verified = Verifier.verifyAll();
     document.getElementById('addDrawModal').classList.remove('active');
     renderHistory();
     renderHeader();
-
-    if (verified > 0) {
-      alert(`結果を保存しました。${verified}件の予想を自動検証しました。`);
-    }
+    if (verified > 0) Utils.showToast(verified + '件の予想を自動検証しました');
+    else Utils.showToast('結果を保存しました');
   }
 
-  /* ===== 4. Records Tab ===== */
+  /* ========== 4. RECORDS TAB ========== */
   function bindRecordsEvents() {
     document.getElementById('recordsFilter').addEventListener('change', renderRecords);
     document.getElementById('recordsSort').addEventListener('change', renderRecords);
   }
 
   function renderRecords() {
-    const predictions = Storage.getPredictions();
-    const verifications = Storage.getVerifications();
-    const verMap = {};
-    verifications.forEach(v => verMap[v.targetDrawId] = v);
-
-    const summaryEl = document.getElementById('recordsSummary');
-    const listEl = document.getElementById('recordsList');
+    var predictions = Storage.getPredictions();
+    var verifications = Storage.getVerifications();
+    var verMap = {};
+    verifications.forEach(function(v) { verMap[v.targetDrawId] = v; });
 
     // Summary
-    const totalPreds = predictions.length;
-    const latestDate = predictions.length > 0 ? predictions[0].targetDate : '-';
-    let totalMatch = 0, matchCount = 0;
-    verifications.forEach(v => v.results.forEach(r => { totalMatch += r.matchCount; matchCount++; }));
-    const avgMatch = matchCount > 0 ? (totalMatch / matchCount).toFixed(1) : '-';
+    var summaryEl = document.getElementById('recordsSummary');
+    var totalPreds = predictions.length;
+    var totalMatch = 0, matchCount = 0;
+    verifications.forEach(function(v) { v.results.forEach(function(r) { totalMatch += r.matchCount; matchCount++; }); });
+    var avgMatch = matchCount > 0 ? (totalMatch / matchCount).toFixed(1) : '-';
 
-    summaryEl.innerHTML = `
-      <div class="stat-item"><div class="stat-value">${totalPreds}</div><div class="stat-label">総予測回数</div></div>
-      <div class="stat-item"><div class="stat-value">${latestDate !== '-' ? Utils.formatDate(latestDate) : '-'}</div><div class="stat-label">最新予測日</div></div>
-      <div class="stat-item"><div class="stat-value">${avgMatch}</div><div class="stat-label">平均一致数</div></div>
-    `;
+    summaryEl.innerHTML =
+      '<div class="stat-card"><div class="stat-value">' + totalPreds + '</div><div class="stat-label">総予測回数</div></div>' +
+      '<div class="stat-card"><div class="stat-value">' + avgMatch + '</div><div class="stat-label">平均一致数</div></div>';
 
+    var listEl = document.getElementById('recordsList');
     if (predictions.length === 0) {
-      listEl.innerHTML = `
-        <div class="no-records">
-          <p>まだ予測がありません。</p>
-          <p>予想タブで最初の予測を生成してください。</p>
-          <button class="btn-secondary" onclick="document.querySelector('[data-tab=tabPredict]').click()">予想タブへ</button>
-        </div>
-      `;
+      listEl.innerHTML = '<div class="no-records"><p>まだ予測がありません。</p><button class="btn btn-secondary btn-sm" onclick="App.switchTab(\'tabPredict\')">予想タブへ</button></div>';
       return;
     }
 
-    // Filter & sort
-    const filter = document.getElementById('recordsFilter').value;
-    const sort = document.getElementById('recordsSort').value;
-
-    let filtered = [...predictions];
-    if (filter === 'verified') filtered = filtered.filter(p => p.verified);
-    if (filter === 'unverified') filtered = filtered.filter(p => !p.verified);
-
+    var filter = document.getElementById('recordsFilter').value;
+    var sort = document.getElementById('recordsSort').value;
+    var filtered = predictions.slice();
+    if (filter === 'verified') filtered = filtered.filter(function(p) { return p.verified; });
+    if (filter === 'unverified') filtered = filtered.filter(function(p) { return !p.verified; });
     if (sort === 'oldest') filtered.reverse();
     if (sort === 'bestmatch') {
-      filtered.sort((a, b) => {
-        const va = verMap[a.targetDrawId];
-        const vb = verMap[b.targetDrawId];
-        const ma = va ? Math.max(...va.results.map(r => r.matchCount)) : -1;
-        const mb = vb ? Math.max(...vb.results.map(r => r.matchCount)) : -1;
+      filtered.sort(function(a, b) {
+        var va = verMap[a.targetDrawId];
+        var vb = verMap[b.targetDrawId];
+        var ma = va ? Math.max.apply(null, va.results.map(function(r) { return r.matchCount; })) : -1;
+        var mb = vb ? Math.max.apply(null, vb.results.map(function(r) { return r.matchCount; })) : -1;
         return mb - ma;
       });
     }
 
-    listEl.innerHTML = filtered.map((pred, idx) => {
-      const ver = verMap[pred.targetDrawId];
-      const hasDrawData = Utils.getAllDrawData().some(d => d.id === pred.targetDrawId);
+    listEl.innerHTML = filtered.map(function(pred, idx) {
+      var ver = verMap[pred.targetDrawId];
+      var statusBadge, statusClass;
+      if (ver) { statusBadge = '検証済み'; statusClass = 'badge-verified'; }
+      else { statusBadge = '未検証'; statusClass = 'badge-unverified'; }
 
-      let statusBadge, statusClass;
-      if (ver) {
-        statusBadge = '検証済み';
-        statusClass = 'badge-verified';
-      } else if (hasDrawData) {
-        statusBadge = '結果待ち';
-        statusClass = 'badge-waiting';
-      } else {
-        statusBadge = '未検証';
-        statusClass = 'badge-unverified';
-      }
-
-      let strategiesHtml = pred.sets.map(set => {
-        const name = Predictor.STRATEGY_NAMES[set.strategy] || set.strategy;
-        const verResult = ver?.results?.find(r => r.strategy === set.strategy);
-
-        let matchHtml = '';
+      var setsHtml = pred.sets.map(function(set) {
+        var name = Predictor.STRATEGY_NAMES[set.strategy] || set.strategy;
+        var verResult = ver ? ver.results.find(function(r) { return r.strategy === set.strategy; }) : null;
+        var matchHtml = '';
         if (verResult) {
-          matchHtml = `<span class="record-match-info">${verResult.matchCount}個一致${verResult.bonusMatch ? '+B' : ''} → <span class="prize-badge ${Utils.prizeClass(verResult.prize)}">${verResult.prize}</span></span>`;
-        } else {
-          matchHtml = '<span class="record-match-info" style="opacity:0.5">抽選結果待ち</span>';
+          matchHtml = '<span class="record-match-info">' + verResult.matchCount + '個一致' + (verResult.bonusMatch ? '+B' : '') + ' <span class="prize-badge ' + Utils.prizeClass(verResult.prize) + '">' + verResult.prize + '</span></span>';
         }
-
-        const matchedSet = verResult ? new Set(verResult.matched) : new Set();
-        const balls = set.nums.map(n => Utils.renderBall(n, { matched: matchedSet.has(n) })).join('');
-
-        return `
-          <div class="record-strategy-row">
-            <span class="record-strategy-name" style="color:var(--${set.strategy})">${name}</span>
-            ${balls}
-            ${matchHtml}
-          </div>
-        `;
+        var matchedSet = verResult ? verResult.matched : [];
+        var balls = set.nums.map(function(n) { return Utils.renderBall(n, { matched: matchedSet.indexOf(n) >= 0 }); }).join('');
+        return '<div class="record-strategy-row"><span class="record-strategy-name">' + name + '</span>' + balls + matchHtml + '</div>';
       }).join('');
 
-      let footerHtml = '';
+      var numsText = pred.sets.map(function(s, i) {
+        var name = Predictor.STRATEGY_NAMES[s.strategy] || s.strategy;
+        return ['①','②','③','④','⑤'][i] + ' ' + name + ': ' + s.nums.map(function(n) { return String(n).padStart(2, '0'); }).join(' ');
+      }).join('\n');
+
+      var footerHtml = '';
       if (ver) {
-        footerHtml = `
-          <div class="record-footer">
-            当選番号: ${Utils.renderBalls(ver.actualNums)} ${Utils.renderBall(ver.actualBonus, { bonus: true })}
-            <br>最高: ${Predictor.STRATEGY_NAMES[ver.bestMatch.strategy]}（${ver.bestMatch.matchCount}個一致）
-          </div>
-        `;
+        footerHtml = '<div class="record-footer">当選番号: ' + Utils.renderBalls(ver.actualNums) + ' ' + Utils.renderBall(ver.actualBonus, { bonus: true }) + '</div>';
       }
 
-      return `
-        <div class="record-card" style="animation-delay:${idx * 0.03}s">
-          <div class="record-card-header">
-            <div>
-              <div class="record-draw-info">第${pred.targetDrawId}回 ${Utils.formatDate(pred.targetDate)}（${pred.targetWeekday}）</div>
-              <div class="record-created">予測生成: ${Utils.formatDateTime(pred.createdAt)}</div>
-            </div>
-            <span class="verification-badge ${statusClass}">${statusBadge}</span>
-          </div>
-          <div class="record-strategies">${strategiesHtml}</div>
-          ${footerHtml}
-        </div>
-      `;
+      return '<div class="record-card" style="animation-delay:' + (idx * 0.03) + 's">' +
+        '<div class="record-card-header"><div><div class="record-draw-info">第' + pred.targetDrawId + '回 ' + Utils.formatDate(pred.targetDate) + '（' + pred.targetWeekday + '）</div><div class="record-created">生成: ' + Utils.formatDateTime(pred.createdAt) + '</div></div><span class="verification-badge ' + statusClass + '">' + statusBadge + '</span></div>' +
+        '<div class="record-strategies">' + setsHtml + '</div>' +
+        Utils.renderCopyableTextarea(numsText, 'record_ta_' + idx) +
+        footerHtml + '</div>';
     }).join('');
   }
 
-  /* ===== 5. Verify Tab ===== */
+  /* ========== 5. VERIFY TAB ========== */
   function bindVerifyEvents() {
-    document.getElementById('btnVerify').addEventListener('click', () => {
-      const count = Verifier.verifyAll();
-      if (count > 0) {
-        alert(`${count}件の予想を検証しました。`);
-      } else {
-        alert('検証対象の予想がありません。（未検証の予想に対する抽選結果が必要です）');
-      }
+    document.getElementById('btnVerify').addEventListener('click', function() {
+      var count = Verifier.verifyAll();
+      if (count > 0) Utils.showToast(count + '件を検証しました');
+      else Utils.showToast('検証対象なし');
       renderVerify();
     });
   }
 
   function renderVerify() {
-    const verifications = Storage.getVerifications();
-    const stats = Verifier.getStats();
-    const learningStatus = Learner.getStatus();
+    var verifications = Storage.getVerifications();
+    var stats = Verifier.getStats();
+    var learningStatus = Learner.getStatus();
 
     // Latest verification
-    const latestEl = document.getElementById('latestVerification');
+    var latestEl = document.getElementById('latestVerification');
     if (verifications.length > 0) {
-      const v = verifications[0];
-      latestEl.innerHTML = `
-        <div class="analysis-card">
-          <h3>最新検証: 第${v.targetDrawId}回 (${Utils.formatDate(v.drawDate)})</h3>
-          <div style="margin-bottom:8px">
-            当選番号: ${Utils.renderBalls(v.actualNums)} ${Utils.renderBall(v.actualBonus, { bonus: true })}
-          </div>
-          ${v.results.map(r => {
-            const name = Predictor.STRATEGY_NAMES[r.strategy] || r.strategy;
-            return `
-              <div class="verification-result-card">
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                  <span style="font-weight:700;color:var(--${r.strategy})">${name}</span>
-                  <span class="prize-badge ${Utils.prizeClass(r.prize)}">${r.prize}</span>
-                </div>
-                <div style="margin:6px 0"><span class="match-count">${r.matchCount}</span> <span style="font-size:0.8rem">個一致${r.bonusMatch ? ' +ボーナス' : ''}</span></div>
-                ${r.matched.length > 0 ? `<div style="font-size:0.75rem;color:var(--text-muted)">一致: ${r.matched.join(', ')}</div>` : ''}
-              </div>
-            `;
-          }).join('')}
-        </div>
-      `;
+      var v = verifications[0];
+      var html = '<div class="card"><h3>最新検証: 第' + v.targetDrawId + '回 (' + Utils.formatDate(v.drawDate) + ')</h3>';
+      html += '<div style="margin-bottom:8px">当選番号: ' + Utils.renderBalls(v.actualNums) + ' ' + Utils.renderBall(v.actualBonus, { bonus: true }) + '</div>';
+      v.results.forEach(function(r) {
+        var name = Predictor.STRATEGY_NAMES[r.strategy] || r.strategy;
+        html += '<div class="verification-result-card"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">' + name + '</span><span class="prize-badge ' + Utils.prizeClass(r.prize) + '">' + r.prize + '</span></div>';
+        html += '<div style="margin:4px 0"><span class="match-count">' + r.matchCount + '</span><span style="font-size:0.8rem">個一致' + (r.bonusMatch ? ' +B' : '') + '</span></div>';
+        if (r.matched.length > 0) html += '<div style="font-size:0.7rem;color:var(--text-muted)">一致: ' + r.matched.join(', ') + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      latestEl.innerHTML = html;
     } else {
-      latestEl.innerHTML = '<div class="analysis-card"><h3>検証結果</h3><p style="color:var(--text-muted)">まだ検証がありません</p></div>';
+      latestEl.innerHTML = '<div class="card"><h3>検証結果</h3><p style="color:var(--text-muted)">まだ検証がありません</p></div>';
     }
 
     // Stats
-    const statsEl = document.getElementById('verificationStats');
+    var statsEl = document.getElementById('verificationStats');
     if (stats.total > 0) {
-      const strategyOrder = ['hot','cold','overdue','balanced','composite'];
-      const chartId = 'chartStrategy';
+      statsEl.innerHTML =
+        '<div class="stats-grid">' +
+        '<div class="stat-card"><div class="stat-value">' + stats.total + '</div><div class="stat-label">検証回数</div></div>' +
+        '<div class="stat-card"><div class="stat-value">' + stats.avgMatch + '</div><div class="stat-label">平均一致</div></div>' +
+        '<div class="stat-card"><div class="stat-value">' + stats.maxMatch + '</div><div class="stat-label">最高一致</div></div>' +
+        '<div class="stat-card"><div class="stat-value">' + (stats.prizeCount['5等'] || 0) + '</div><div class="stat-label">5等以上</div></div>' +
+        '</div>' +
+        '<div class="card"><h3>戦略別成績</h3><div class="chart-container" style="height:200px"><canvas id="chartStrategy"></canvas></div></div>';
 
-      statsEl.innerHTML = `
-        <div class="stats-grid">
-          <div class="stat-card"><div class="stat-value">${stats.total}</div><div class="stat-label">検証セット数</div></div>
-          <div class="stat-card"><div class="stat-value">${stats.avgMatch}</div><div class="stat-label">平均一致数</div></div>
-          <div class="stat-card"><div class="stat-value">${stats.maxMatch}</div><div class="stat-label">最高一致数</div></div>
-          <div class="stat-card"><div class="stat-value">${stats.prizeCount['5等'] || 0}</div><div class="stat-label">5等以上</div></div>
-        </div>
-        <div class="analysis-card">
-          <h3>戦略別成績</h3>
-          <div class="chart-container" style="height:200px"><canvas id="${chartId}"></canvas></div>
-        </div>
-      `;
-
-      requestAnimationFrame(() => {
-        if (Object.keys(stats.strategyStats).length > 0) {
-          Charts.renderStrategyChart(chartId, stats.strategyStats);
-        }
+      requestAnimationFrame(function() {
+        Charts.renderStrategyChart('chartStrategy', stats.strategyStats);
       });
     } else {
       statsEl.innerHTML = '';
+    }
+
+    // Accuracy trend (Improvement 18)
+    var trendSection = document.getElementById('accuracyTrendSection');
+    var trendData = Verifier.getAccuracyTrend();
+    if (trendData.length >= 2) {
+      trendSection.innerHTML = '<div class="card"><h3>予測的中率の推移</h3><div class="chart-container" style="height:200px"><canvas id="chartAccTrend"></canvas></div></div>';
+      requestAnimationFrame(function() {
+        Charts.renderAccuracyTrend('chartAccTrend', trendData);
+      });
+    } else {
+      trendSection.innerHTML = '';
     }
 
     // Learning status
@@ -627,205 +710,342 @@ const App = (() => {
   }
 
   function renderLearningStatus(status) {
-    const el = document.getElementById('learningStatus');
-    const weights = status.currentWeights;
-    const prev = status.previousWeights;
+    var el = document.getElementById('learningStatus');
+    var weights = status.currentWeights;
+    var prev = status.previousWeights;
 
-    const weightKeys = [
-      { key: 'frequency', label: '出現頻度' },
-      { key: 'dormancy', label: '出遅れ度' },
-      { key: 'correlation', label: '相関' },
-      { key: 'trend', label: 'トレンド' },
-      { key: 'balance', label: 'バランス' },
-      { key: 'weekday', label: '曜日' },
-    ];
-
-    const barsHtml = weightKeys.map(({key, label}) => {
-      const val = weights[key] || 0;
-      let changeHtml = '';
+    var barsHtml = '';
+    var keys = Object.keys(Storage.WEIGHT_LABELS);
+    keys.forEach(function(key) {
+      var label = Storage.WEIGHT_LABELS[key];
+      var val = ((weights[key] || 0) * 100).toFixed(1);
+      var changeHtml = '';
       if (prev) {
-        const diff = val - (prev[key] || 0);
-        if (diff !== 0) {
-          const cls = diff > 0 ? 'positive' : 'negative';
-          changeHtml = `<span class="weight-change ${cls}">${diff > 0 ? '+' : ''}${diff}%</span>`;
+        var diff = (weights[key] || 0) - (prev[key] || 0);
+        if (Math.abs(diff) > 0.001) {
+          var cls = diff > 0 ? 'positive' : 'negative';
+          changeHtml = '<span class="weight-change ' + cls + '">' + (diff > 0 ? '+' : '') + (diff * 100).toFixed(1) + '%</span>';
         }
       }
-      return `
-        <div class="weight-bar">
-          <span class="weight-bar-label">${label}</span>
-          <div class="weight-bar-track">
-            <div class="weight-bar-fill" style="width:${val}%">${val}%</div>
-          </div>
-          ${changeHtml}
-        </div>
-      `;
+      barsHtml += '<div class="weight-bar"><span class="weight-bar-label">' + label + '</span><div class="weight-bar-track"><div class="weight-bar-fill" style="width:' + val + '%">' + val + '%</div></div>' + changeHtml + '</div>';
+    });
+
+    var historyHtml = status.recentHistory.slice(0, 5).map(function(h) {
+      var stratName = Predictor.STRATEGY_NAMES[h.bestStrategy] || h.bestStrategy;
+      return '<div class="learning-history-item">' + Utils.formatDateTime(h.learnedAt) + ' 第' + h.triggerDrawId + '回（最優秀: ' + stratName + '）</div>';
     }).join('');
 
-    const historyHtml = status.recentHistory.slice(0, 5).map(h => `
-      <div class="learning-history-item">
-        ${Utils.formatDateTime(h.learnedAt)} — 第${h.triggerDrawId}回
-        （最優秀: ${Predictor.STRATEGY_NAMES[h.bestStrategy] || h.bestStrategy}）
-      </div>
-    `).join('');
+    el.innerHTML = '<h3>学習状態</h3>' + barsHtml +
+      '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">学習回数: ' + status.learningCount + '回 / サンプル: ' + status.totalSamples + '</div>' +
+      (historyHtml ? '<div class="learning-history"><strong>学習履歴:</strong>' + historyHtml + '</div>' : '') +
+      '<button class="btn btn-sm btn-secondary" id="btnResetLearn" style="margin-top:8px">学習をリセット</button>';
 
-    el.innerHTML = `
-      <h3>🧠 学習状態</h3>
-      ${barsHtml}
-      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:8px">
-        学習回数: ${status.learningCount}回 / サンプル数: ${status.totalSamples}
-      </div>
-      ${historyHtml ? `
-        <div class="learning-history">
-          <strong>学習履歴:</strong>
-          ${historyHtml}
-        </div>
-      ` : ''}
-      <button class="btn-secondary btn-reset-learn" id="btnResetLearn">学習をリセット</button>
-    `;
-
-    document.getElementById('btnResetLearn')?.addEventListener('click', () => {
-      if (confirm('学習をリセットし、重みをデフォルトに戻しますか？')) {
-        Learner.resetWeights();
-        renderVerify();
-        renderSettings();
-      }
-    });
+    var resetBtn = document.getElementById('btnResetLearn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function() {
+        if (confirm('学習をリセットしますか？')) {
+          Learner.resetWeights();
+          renderVerify();
+          if (currentTab === 'tabSettings') renderSettings();
+        }
+      });
+    }
   }
 
-  /* ===== 6. Settings Tab ===== */
+  /* ========== 6. BACKTEST TAB ========== */
+  function bindBacktestEvents() {
+    document.getElementById('btnBacktest50').addEventListener('click', function() { runBacktest(50); });
+    document.getElementById('btnBacktest100').addEventListener('click', function() { runBacktest(100); });
+  }
+
+  function runBacktest(n) {
+    var data = Utils.getAllDrawData();
+    if (data.length < 30) { alert('バックテストにはデータが不足しています（最低30回分必要）。'); return; }
+
+    var overlay = document.getElementById('loadingOverlay');
+    var loadText = document.getElementById('loadingText');
+    overlay.classList.add('active');
+    loadText.textContent = 'バックテスト実行中... (' + n + '回分)';
+
+    setTimeout(function() {
+      try {
+        var weights = Storage.getWeights();
+        Backtest.run(data, weights, n);
+      } catch (e) {
+        console.error(e);
+        alert('バックテスト中にエラーが発生しました。');
+      }
+      overlay.classList.remove('active');
+      renderBacktest();
+    }, 100);
+  }
+
+  function renderBacktest() {
+    var saved = Storage.getBacktestResults();
+    if (!saved) {
+      document.getElementById('backtestSummary').innerHTML = '';
+      document.getElementById('backtestChart').style.display = 'none';
+      document.getElementById('backtestDetails').innerHTML = '';
+      return;
+    }
+
+    var summary = saved.summary;
+    var results = saved.results;
+
+    // Summary
+    var summaryEl = document.getElementById('backtestSummary');
+    summaryEl.innerHTML = '<div class="backtest-summary">' +
+      '<div class="stat-card"><div class="stat-value">' + summary.totalDraws + '</div><div class="stat-label">テスト回数</div></div>' +
+      '<div class="stat-card"><div class="stat-value">' + summary.avgMatch + '</div><div class="stat-label">平均一致</div></div>' +
+      '<div class="stat-card"><div class="stat-value">' + summary.maxMatch + '</div><div class="stat-label">最高一致</div></div>' +
+      '</div>' +
+      '<div class="card"><h3>等級分布</h3>' +
+      Object.entries(summary.prizeCount).map(function(entry) {
+        return '<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:0.8rem"><span>' + entry[0] + '</span><span style="font-weight:700">' + entry[1] + '回</span></div>';
+      }).join('') +
+      '<div style="font-size:0.65rem;color:var(--text-muted);margin-top:4px">実行: ' + Utils.formatDateTime(summary.runAt) + '</div></div>';
+
+    // Chart
+    if (results.length > 0) {
+      document.getElementById('backtestChart').style.display = 'block';
+      requestAnimationFrame(function() {
+        Charts.renderBacktestChart('chartBacktest', results);
+      });
+    }
+
+    // Details (first 20)
+    var detailsEl = document.getElementById('backtestDetails');
+    detailsEl.innerHTML = '<div class="card"><h3>詳細結果</h3>' +
+      results.slice(0, 20).map(function(r) {
+        return '<div class="draw-row"><span class="draw-id">#' + r.drawId + '</span><span class="draw-date">' + Utils.formatDate(r.date) + '</span><span style="font-family:var(--font-mono);font-weight:700;color:' + (r.bestMatchCount >= 3 ? 'var(--success)' : 'var(--text-muted)') + '">' + r.bestMatchCount + '個一致</span><span class="prize-badge ' + Utils.prizeClass(r.bestPrize) + '">' + r.bestPrize + '</span></div>';
+      }).join('') +
+      '</div>';
+  }
+
+  /* ========== 7. SETTINGS TAB ========== */
   function bindSettingsEvents() {
-    document.querySelectorAll('.theme-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const settings = Storage.getSettings();
+    document.querySelectorAll('.theme-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var settings = Storage.getSettings();
         settings.theme = btn.dataset.theme;
         Storage.saveSettings(settings);
         applyTheme();
       });
     });
 
-    document.getElementById('toggleAutoLearn').addEventListener('change', (e) => {
-      const settings = Storage.getSettings();
+    document.getElementById('toggleAutoLearn').addEventListener('change', function(e) {
+      var settings = Storage.getSettings();
       settings.autoLearn = e.target.checked;
       Storage.saveSettings(settings);
     });
 
-    document.getElementById('btnExport').addEventListener('click', () => {
-      const data = Storage.exportAll();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
+    document.getElementById('btnApplyLearned').addEventListener('click', function() {
+      Utils.showToast('学習済みの値が適用されています');
+    });
+
+    document.getElementById('btnResetWeights').addEventListener('click', function() {
+      if (confirm('重みをデフォルトに戻しますか？')) {
+        Storage.saveWeights(JSON.parse(JSON.stringify(Storage.DEFAULT_WEIGHTS)));
+        renderSettings();
+        Utils.showToast('重みをリセットしました');
+      }
+    });
+
+    document.getElementById('btnExport').addEventListener('click', function() {
+      var data = Storage.exportAll();
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
       a.href = url;
-      a.download = `loto6_backup_${new Date().toISOString().split('T')[0]}.json`;
+      a.download = 'loto6_backup_' + new Date().toISOString().split('T')[0] + '.json';
       a.click();
       URL.revokeObjectURL(url);
     });
 
-    document.getElementById('btnImport').addEventListener('click', () => {
+    document.getElementById('btnImport').addEventListener('click', function() {
       document.getElementById('fileImport').click();
     });
 
-    document.getElementById('fileImport').addEventListener('change', (e) => {
-      const file = e.target.files[0];
+    document.getElementById('fileImport').addEventListener('change', function(e) {
+      var file = e.target.files[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = () => {
+      var reader = new FileReader();
+      reader.onload = function() {
         try {
-          const data = JSON.parse(reader.result);
+          var data = JSON.parse(reader.result);
           Storage.importAll(data);
-          alert('データをインポートしました。');
+          Utils.showToast('インポート完了');
           location.reload();
-        } catch {
+        } catch (err) {
           alert('無効なファイルです。');
         }
       };
       reader.readAsText(file);
     });
 
-    document.getElementById('btnResetData').addEventListener('click', () => {
+    document.getElementById('btnResetData').addEventListener('click', function() {
       if (confirm('すべてのデータをリセットしますか？この操作は取り消せません。')) {
         Storage.resetAll();
         location.reload();
       }
     });
 
-    document.getElementById('btnApplyLearned').addEventListener('click', () => {
-      renderSettings();
-      alert('学習済みの値が適用されています。');
-    });
-
-    document.getElementById('btnResetWeights').addEventListener('click', () => {
-      Storage.saveWeights({ ...Storage.DEFAULT_SETTINGS.weights });
-      renderSettings();
+    // QR Code (Improvement 20)
+    document.getElementById('btnShowQR').addEventListener('click', function() {
+      generateQR();
     });
   }
 
   function renderSettings() {
-    const settings = Storage.getSettings();
-    const weights = settings.weights;
+    var settings = Storage.getSettings();
+    var weights = settings.weights;
 
-    // Theme buttons
-    document.querySelectorAll('.theme-btn').forEach(btn => {
+    // Theme
+    document.querySelectorAll('.theme-btn').forEach(function(btn) {
       btn.classList.toggle('active', btn.dataset.theme === settings.theme);
     });
 
-    // Auto-learn toggle
+    // Auto-learn
     document.getElementById('toggleAutoLearn').checked = settings.autoLearn;
 
-    // Weight sliders
-    const slidersEl = document.getElementById('weightsSliders');
-    const weightKeys = [
-      { key: 'frequency', label: '出現頻度' },
-      { key: 'dormancy', label: '出遅れ度' },
-      { key: 'correlation', label: '相関' },
-      { key: 'trend', label: 'トレンド' },
-      { key: 'balance', label: 'バランス' },
-      { key: 'weekday', label: '曜日' },
-    ];
+    // Weight sliders (W1-W12)
+    var slidersEl = document.getElementById('weightsSliders');
+    var keys = Object.keys(Storage.WEIGHT_LABELS);
 
-    slidersEl.innerHTML = weightKeys.map(({key, label}) => `
-      <div class="weight-slider-row">
-        <div class="weight-slider-label">
-          <span>${label}</span>
-          <span id="weightVal_${key}">${weights[key]}%</span>
-        </div>
-        <input type="range" min="5" max="50" value="${weights[key]}" data-key="${key}"
-               oninput="document.getElementById('weightVal_${key}').textContent=this.value+'%'">
-      </div>
-    `).join('');
+    slidersEl.innerHTML = keys.map(function(key) {
+      var label = Storage.WEIGHT_LABELS[key];
+      var val = Math.round((weights[key] || 0) * 100);
+      return '<div class="weight-slider-row"><div class="weight-slider-label"><span>' + key + ': ' + label + '</span><span id="wv_' + key + '">' + val + '%</span></div><input type="range" min="3" max="25" value="' + val + '" data-key="' + key + '" oninput="document.getElementById(\'wv_' + key + '\').textContent=this.value+\'%\'"></div>';
+    }).join('');
 
-    // Save on slider change
-    slidersEl.querySelectorAll('input[type="range"]').forEach(slider => {
-      slider.addEventListener('change', () => {
-        const newWeights = {};
-        slidersEl.querySelectorAll('input[type="range"]').forEach(s => {
-          newWeights[s.dataset.key] = parseInt(s.value);
+    slidersEl.querySelectorAll('input[type="range"]').forEach(function(slider) {
+      slider.addEventListener('change', function() {
+        var newWeights = {};
+        slidersEl.querySelectorAll('input[type="range"]').forEach(function(s) {
+          newWeights[s.dataset.key] = parseInt(s.value) / 100;
         });
-        // Normalize
-        const total = Object.values(newWeights).reduce((a,b) => a+b, 0);
-        for (const k of Object.keys(newWeights)) {
-          newWeights[k] = Math.round(newWeights[k] / total * 100);
-        }
-        const sum = Object.values(newWeights).reduce((a,b) => a+b, 0);
-        if (sum !== 100) {
-          const maxK = Object.keys(newWeights).reduce((a,b) => newWeights[a] >= newWeights[b] ? a : b);
-          newWeights[maxK] += 100 - sum;
-        }
+        // Normalize to 1.0
+        var total = Object.values(newWeights).reduce(function(s, v) { return s + v; }, 0);
+        for (var k in newWeights) newWeights[k] = parseFloat((newWeights[k] / total).toFixed(4));
         Storage.saveWeights(newWeights);
         renderSettings();
       });
     });
 
+    // Weights chart
+    requestAnimationFrame(function() {
+      Charts.renderWeightsChart('chartWeights', weights);
+    });
+
     // Data info
-    const data = Utils.getAllDrawData();
-    const size = Storage.getStorageSize();
-    const sizeKB = (size / 1024).toFixed(1);
-    document.getElementById('dataInfo').textContent = `保存データ量: ${sizeKB} KB`;
-    document.getElementById('dataRange').textContent =
-      data.length > 0 ? `内蔵データ: 第${data[data.length-1].id}回〜第${data[0].id}回 (${data.length}件)` : 'データなし';
+    var data = Utils.getAllDrawData();
+    var sizeKB = (Storage.getStorageSize() / 1024).toFixed(1);
+    document.getElementById('dataInfo').textContent = '保存データ量: ' + sizeKB + ' KB';
+    document.getElementById('dataRange').textContent = data.length > 0 ?
+      '内蔵データ: 第' + data[data.length - 1].id + '回〜第' + data[0].id + '回 (' + data.length + '件)' : 'データなし';
   }
 
-  /* --- Start --- */
+  function generateQR() {
+    var container = document.getElementById('qrDisplay');
+    var data = Storage.exportAll();
+    var json = JSON.stringify(data);
+
+    // QR codes have size limits, compress
+    if (json.length > 4000) {
+      // For large data, only export recent predictions and settings
+      var compact = {
+        settings: data.settings,
+        predictions: (data.predictions || []).slice(0, 5),
+        verifications: (data.verifications || []).slice(0, 5),
+        learningHistory: (data.learningHistory || []).slice(0, 3),
+        _version: 'v3-compact',
+      };
+      json = JSON.stringify(compact);
+    }
+
+    container.innerHTML = '<div class="qr-container"><div id="qrCanvas"></div></div><p style="font-size:0.65rem;color:var(--text-muted);text-align:center;margin-top:4px">データサイズ: ' + (json.length / 1024).toFixed(1) + ' KB</p>';
+
+    if (typeof QRCode !== 'undefined') {
+      try {
+        new QRCode(document.getElementById('qrCanvas'), {
+          text: json,
+          width: 256,
+          height: 256,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.L,
+        });
+      } catch (e) {
+        container.innerHTML = '<p style="color:var(--danger);font-size:0.75rem">QRコード生成に失敗しました（データが大きすぎる可能性があります）</p>';
+      }
+    } else {
+      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.75rem">QRCodeライブラリが読み込めませんでした</p>';
+    }
+  }
+
+  /* ---------- Ball Detail Popup (Improvement 12) ---------- */
+  function showBallDetail(num) {
+    var data = Utils.getAllDrawData();
+    var analysis = Analyzer.fullAnalysis(data);
+    var freq = analysis.frequency[num] || { count: 0, rate: 0 };
+    var dormancy = analysis.dormancy[num] || 0;
+    var hotCold = analysis.hotCold[num] || { state: 'normal', recentRate: 0 };
+    var interval = analysis.intervalDist[num] || { avgInterval: null, probNext: 0 };
+
+    // Find last appearance date
+    var lastDate = '-';
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].nums.indexOf(num) >= 0) {
+        lastDate = Utils.formatDate(data[i].date);
+        break;
+      }
+    }
+
+    var stateLabel = hotCold.state === 'hot' ? '<span class="tag-hot">HOT</span>' : hotCold.state === 'cold' ? '<span class="tag-cold">COLD</span>' : '<span class="tag-normal">NORMAL</span>';
+
+    var popup = document.getElementById('ballDetailPopup');
+    var content = document.getElementById('ballDetailContent');
+    content.innerHTML =
+      '<div style="margin-bottom:12px">' + Utils.renderBall(num) + '</div>' +
+      '<div style="font-size:1rem;font-weight:700;margin-bottom:12px">番号 ' + num + ' ' + stateLabel + '</div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">出現回数</span><span class="popup-stat-value">' + freq.count + '回 (' + (freq.rate * 100).toFixed(1) + '%)</span></div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">出遅れ</span><span class="popup-stat-value">' + dormancy + '回不出</span></div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">前回出現</span><span class="popup-stat-value">' + lastDate + '</span></div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">平均間隔</span><span class="popup-stat-value">' + (interval.avgInterval ? interval.avgInterval.toFixed(1) + '回' : '-') + '</span></div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">次回出現確率</span><span class="popup-stat-value">' + (interval.probNext * 100).toFixed(1) + '%</span></div>' +
+      '<button class="btn btn-sm btn-secondary" style="margin-top:12px;width:100%" onclick="document.getElementById(\'ballDetailPopup\').classList.remove(\'active\')">閉じる</button>';
+    popup.classList.add('active');
+    popup.onclick = function(e) { if (e.target === popup) popup.classList.remove('active'); };
+  }
+
+  /* ---------- Pull-to-refresh (Improvement 11) ---------- */
+  function initPullToRefresh() {
+    var startY = 0;
+    var pulling = false;
+
+    document.addEventListener('touchstart', function(e) {
+      if (window.scrollY === 0) {
+        startY = e.touches[0].pageY;
+        pulling = true;
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(e) {
+      if (!pulling) return;
+      var diff = e.touches[0].pageY - startY;
+      if (diff > 80 && window.scrollY === 0) {
+        pulling = false;
+        Utils.hapticFeedback();
+        renderCurrentTab();
+        Utils.showToast('更新しました');
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchend', function() { pulling = false; }, { passive: true });
+  }
+
+  /* ---------- Start ---------- */
   document.addEventListener('DOMContentLoaded', init);
 
-  return { switchTab };
+  return { switchTab: switchTab, showBallDetail: showBallDetail };
 })();

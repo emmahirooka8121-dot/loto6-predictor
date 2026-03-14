@@ -1,6 +1,7 @@
-/* ===== Utility Functions ===== */
+/* ===== Utility Functions (v3 Enhanced) ===== */
 
 const Utils = (() => {
+  'use strict';
   const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 
   function getWeekday(dateStr) {
@@ -9,13 +10,19 @@ const Utils = (() => {
   }
 
   function formatDate(dateStr) {
+    if (!dateStr) return '';
     const d = new Date(dateStr + 'T00:00:00');
     return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
   }
 
   function formatDateTime(isoStr) {
+    if (!isoStr) return '';
     const d = new Date(isoStr);
     return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  function toDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
 
   function nextDrawDate(fromDate) {
@@ -34,13 +41,13 @@ const Utils = (() => {
 
   function nextDrawInfo() {
     const nd = nextDrawDate();
-    const dateStr = nd.toISOString().split('T')[0];
+    const dateStr = toDateStr(nd);
     const weekday = WEEKDAYS[nd.getDay()];
     const allData = getAllDrawData();
     const lastId = allData.length > 0 ? allData[0].id : 2084;
-    const nextId = lastId + 1;
-    // Check if there's already a draw for today or a future unmatched draw
-    return { id: nextId, date: dateStr, weekday, formatted: formatDate(dateStr) };
+    const now = new Date();
+    const daysUntil = Math.max(0, Math.ceil((nd - now) / 86400000));
+    return { id: lastId + 1, date: dateStr, weekday, formatted: `${formatDate(dateStr)}（${weekday}）`, daysUntil };
   }
 
   function getAllDrawData() {
@@ -49,10 +56,7 @@ const Utils = (() => {
     const merged = [...builtin];
     const ids = new Set(builtin.map(d => d.id));
     for (const ud of user) {
-      if (!ids.has(ud.id)) {
-        merged.push(ud);
-        ids.add(ud.id);
-      }
+      if (!ids.has(ud.id)) { merged.push(ud); ids.add(ud.id); }
     }
     merged.sort((a, b) => b.id - a.id);
     return merged;
@@ -68,29 +72,35 @@ const Utils = (() => {
 
   function renderBall(num, options = {}) {
     const cls = ['ball', getBallColorClass(num)];
-    if (options.animate) cls.push('animate');
-    if (options.matched) cls.push('matched');
-    if (options.bonus) cls.push('bonus');
+    if (options.animate) cls.push('ball-animate');
+    if (options.matched) cls.push('ball-matched');
+    if (options.bonus) cls.push('ball-bonus');
+    if (options.clickable) cls.push('ball-clickable');
     const delay = options.delay || 0;
-    const style = delay ? `animation-delay: ${delay}s` : '';
-    return `<span class="${cls.join(' ')}" ${style ? `style="${style}"` : ''}>${num}</span>`;
+    const style = delay ? `animation-delay: ${delay}ms` : '';
+    const numStr = String(num).padStart(2, '0');
+    const dataAttr = options.clickable ? `data-ball-num="${num}" onclick="App.showBallDetail(${num})"` : '';
+    return `<span class="${cls.join(' ')}" ${style ? `style="${style}"` : ''} ${dataAttr}>${numStr}</span>`;
   }
 
   function renderBalls(nums, options = {}) {
     return nums.map((n, i) => renderBall(n, {
       ...options,
-      delay: options.animate ? i * 0.08 : 0,
-      matched: options.matchedNums ? options.matchedNums.includes(n) : false,
+      delay: options.animate ? i * 300 : 0,
+      matched: options.matchedNums ? options.matchedNums.includes(n) : (options.matched || false),
     })).join('');
   }
 
-  function calcSum(nums) {
-    return nums.reduce((a, b) => a + b, 0);
-  }
+  function calcSum(nums) { return nums.reduce((a, b) => a + b, 0); }
 
-  function calcOddEven(nums) {
+  function calcOddEvenStr(nums) {
     const odd = nums.filter(n => n % 2 === 1).length;
     return `${odd}:${6 - odd}`;
+  }
+
+  function calcOddEvenObj(nums) {
+    const odd = nums.filter(n => n % 2 === 1).length;
+    return { odd, even: nums.length - odd };
   }
 
   function prizeTier(matchCount, bonusMatch) {
@@ -107,9 +117,76 @@ const Utils = (() => {
     return map[tier] || 'prize-miss';
   }
 
+  function copyToClipboard(text) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => showToast('コピーしました')).catch(() => {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('コピーしました');
+  }
+
+  function showToast(msg, duration) {
+    duration = duration || 2000;
+    let toast = document.getElementById('toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => toast.classList.remove('show'), duration);
+  }
+
+  function hapticFeedback() {
+    if (navigator.vibrate) navigator.vibrate([30]);
+  }
+
+  function renderMarkSheet(nums) {
+    const selected = new Set(nums);
+    let html = '<div class="marksheet">';
+    for (let n = 1; n <= 43; n++) {
+      const cls = selected.has(n) ? 'ms-num ms-marked' : 'ms-num';
+      html += `<div class="${cls}">${String(n).padStart(2, '0')}</div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderCopyableTextarea(text, id) {
+    return `<textarea readonly class="copyable-textarea" id="${id || ''}" onfocus="this.select()" onclick="this.select()">${text}</textarea>`;
+  }
+
+  function debounce(fn, ms) {
+    let timer;
+    return function() {
+      clearTimeout(timer);
+      const args = arguments;
+      const ctx = this;
+      timer = setTimeout(() => fn.apply(ctx, args), ms);
+    };
+  }
+
   return {
-    getWeekday, formatDate, formatDateTime, nextDrawDate, nextDrawInfo,
-    getAllDrawData, getBallColorClass, renderBall, renderBalls,
-    calcSum, calcOddEven, prizeTier, prizeClass
+    getWeekday, formatDate, formatDateTime, toDateStr,
+    nextDrawDate, nextDrawInfo, getAllDrawData,
+    getBallColorClass, renderBall, renderBalls,
+    calcSum, calcOddEvenStr, calcOddEvenObj, prizeTier, prizeClass,
+    copyToClipboard, showToast, hapticFeedback,
+    renderMarkSheet, renderCopyableTextarea, debounce
   };
 })();
