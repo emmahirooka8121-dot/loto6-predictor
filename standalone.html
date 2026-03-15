@@ -1,0 +1,5059 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#f59e0b">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="ロト6 AI予測 - 統計分析とAIアルゴリズムで予想番号を自動生成">
+  <title>ロト6 AI予測ラボ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+/* ===== Loto6 AI Predictor v3 - Mobile-First Dark Theme ===== */
+
+/* --- CSS Variables --- */
+:root {
+  --bg: #111;
+  --bg-card: #1a1a2e;
+  --bg-card-alt: #16213e;
+  --bg-input: #0d0d1a;
+  --text: #e4e4e7;
+  --text-muted: #9ca3af;
+  --text-dim: #6b7280;
+  --accent: #f59e0b;
+  --accent2: #00e5ff;
+  --border: #2a2a3e;
+  --hot: #ef4444;
+  --cold: #3b82f6;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --ball-1-9: linear-gradient(135deg, #eab308, #ca8a04);
+  --ball-10-19: linear-gradient(135deg, #ef4444, #dc2626);
+  --ball-20-29: linear-gradient(135deg, #3b82f6, #2563eb);
+  --ball-30-39: linear-gradient(135deg, #22c55e, #16a34a);
+  --ball-40-43: linear-gradient(135deg, #a855f7, #7c3aed);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tab-height: 60px;
+  --header-height: 48px;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+[data-theme="light"] {
+  --bg: #f5f5f5;
+  --bg-card: #ffffff;
+  --bg-card-alt: #f0f0f5;
+  --bg-input: #eaeaf0;
+  --text: #1a1a2e;
+  --text-muted: #6b7280;
+  --text-dim: #9ca3af;
+  --border: #d1d5db;
+}
+
+/* --- Reset & Base --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100dvh;
+  overflow-x: hidden;
+  padding-top: var(--header-height);
+  padding-bottom: calc(var(--tab-height) + var(--safe-bottom) + 8px);
+  -webkit-tap-highlight-color: transparent;
+}
+
+a { color: var(--accent2); text-decoration: none; }
+
+/* --- Header --- */
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: linear-gradient(180deg, var(--bg), rgba(17,17,17,0.95));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--header-height);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-title {
+  font-size: 1rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.header-info {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* --- Tab Bar --- */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  display: flex;
+  padding-bottom: var(--safe-bottom);
+  height: calc(var(--tab-height) + var(--safe-bottom));
+}
+
+.tab-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.2s;
+  -webkit-user-select: none;
+  user-select: none;
+  border: none;
+  background: none;
+  min-height: 44px;
+}
+
+.tab-item svg { width: 22px; height: 22px; margin-bottom: 2px; }
+.tab-item.active { color: var(--accent); }
+.tab-item:active { transform: scale(0.95); }
+
+/* --- Tab Content --- */
+.tab-content {
+  display: none;
+  padding: 12px;
+  animation: fadeUp 0.3s ease;
+}
+
+.tab-content.active { display: block; }
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Cards --- */
+.card {
+  background: linear-gradient(145deg, var(--bg-card), var(--bg-card-alt));
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border);
+}
+
+.card h3 {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+/* --- Balls --- */
+.ball {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #fff;
+  margin: 2px;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  cursor: default;
+  transition: transform 0.2s;
+}
+
+.ball-1-9 { background: var(--ball-1-9); }
+.ball-10-19 { background: var(--ball-10-19); }
+.ball-20-29 { background: var(--ball-20-29); }
+.ball-30-39 { background: var(--ball-30-39); }
+.ball-40-43 { background: var(--ball-40-43); }
+
+.ball-bonus {
+  opacity: 0.6;
+  border: 2px dashed rgba(255,255,255,0.5);
+  width: 32px;
+  height: 32px;
+  font-size: 0.7rem;
+}
+
+.ball-matched {
+  box-shadow: 0 0 0 3px var(--accent), 0 0 12px var(--accent);
+  transform: scale(1.1);
+}
+
+.ball-clickable { cursor: pointer; }
+.ball-clickable:hover { transform: scale(1.15); }
+.ball-clickable:active { transform: scale(0.95); }
+
+.ball-animate {
+  animation: ballSpin 0.5s ease forwards;
+  opacity: 0;
+}
+
+@keyframes ballSpin {
+  0% { opacity: 0; transform: scale(0) rotate(360deg); }
+  60% { opacity: 1; transform: scale(1.2) rotate(0deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+.balls-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+/* --- Buttons --- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 44px;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), #d97706);
+  color: #000;
+  width: 100%;
+}
+
+.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-advanced {
+  background: linear-gradient(135deg, var(--accent2), #0891b2);
+  color: #000;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  min-height: 32px;
+  border-radius: 6px;
+}
+
+.btn-copy {
+  background: var(--bg-card-alt);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  min-height: 28px;
+}
+
+.btn-copy:active { background: var(--accent); color: #000; }
+
+/* --- Prediction Card --- */
+.prediction-card {
+  background: linear-gradient(145deg, var(--bg-card), var(--bg-card-alt));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+  animation: fadeUp 0.3s ease backwards;
+}
+
+.prediction-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.strategy-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.confidence-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.confidence-high { color: var(--success); border: 1px solid var(--success); }
+.confidence-mid { color: var(--accent); border: 1px solid var(--accent); }
+.confidence-low { color: var(--text-muted); border: 1px solid var(--text-dim); }
+
+.prediction-meta {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.prediction-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* --- Mark Sheet --- */
+.marksheet {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-top: 8px;
+  max-width: 300px;
+}
+
+.ms-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+}
+
+.ms-marked {
+  background: var(--accent);
+  color: #000;
+  font-weight: 800;
+  border-color: var(--accent);
+  box-shadow: 0 0 6px rgba(245,158,11,0.4);
+}
+
+/* --- Copyable Textarea --- */
+.copyable-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  resize: none;
+  outline: none;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+.copyable-textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(245,158,11,0.2);
+}
+
+/* --- Dashboard Widgets --- */
+.dashboard-widgets {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 8px 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.dashboard-widgets::-webkit-scrollbar { display: none; }
+
+.widget-card {
+  flex: 0 0 auto;
+  min-width: 120px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  text-align: center;
+}
+
+.widget-value {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--accent);
+  font-family: var(--font-mono);
+}
+
+.widget-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* --- Status Bar --- */
+.status-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  margin-bottom: 10px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.green { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.status-dot.yellow { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+.status-dot.gray { background: var(--text-dim); }
+
+.lock-banner {
+  background: linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.05));
+  border: 1px solid rgba(34,197,94,0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.75rem;
+  margin-bottom: 10px;
+}
+
+/* --- Disclaimer --- */
+.disclaimer {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 12px;
+  line-height: 1.5;
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+}
+
+/* --- History / Draw Rows --- */
+.draw-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.draw-id {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  min-width: 55px;
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+
+.draw-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  min-width: 70px;
+}
+
+.draw-balls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.draw-balls .ball { width: 28px; height: 28px; font-size: 0.65rem; }
+
+/* --- Records --- */
+.record-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  animation: fadeUp 0.2s ease backwards;
+}
+
+.record-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.record-draw-info {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.record-created {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.verification-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.badge-verified { background: rgba(34,197,94,0.15); color: var(--success); }
+.badge-unverified { background: rgba(107,114,128,0.15); color: var(--text-muted); }
+.badge-waiting { background: rgba(245,158,11,0.15); color: var(--accent); }
+
+.record-strategy-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  font-size: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.record-strategy-row .ball { width: 26px; height: 26px; font-size: 0.6rem; }
+
+.record-strategy-name {
+  font-weight: 700;
+  min-width: 80px;
+  font-size: 0.7rem;
+}
+
+.record-match-info { font-size: 0.7rem; color: var(--text-muted); }
+
+.record-footer {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.record-footer .ball { width: 24px; height: 24px; font-size: 0.6rem; }
+
+/* --- Prize Badges --- */
+.prize-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.prize-1 { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; }
+.prize-2 { background: #c0c0c0; color: #000; }
+.prize-3 { background: #cd7f32; color: #fff; }
+.prize-4 { background: var(--bg-card-alt); color: var(--accent); border: 1px solid var(--accent); }
+.prize-5 { background: var(--bg-card-alt); color: var(--text-muted); border: 1px solid var(--border); }
+.prize-miss { background: transparent; color: var(--text-dim); }
+
+/* --- Analysis --- */
+.period-selector {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.period-btn {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+.period-btn.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.chart-container {
+  position: relative;
+  width: 100%;
+  min-height: 150px;
+}
+
+.dormancy-list, .correlation-list {
+  list-style: none;
+}
+
+.dormancy-list li, .correlation-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.dormancy-list li .ball, .correlation-list li .ball {
+  width: 24px;
+  height: 24px;
+  font-size: 0.6rem;
+}
+
+/* --- Heatmap --- */
+.heatmap-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  max-width: 350px;
+  margin: 0 auto;
+}
+
+.heatmap-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: #fff;
+  position: relative;
+}
+
+/* --- Hot/Cold Tags --- */
+.tag-hot { color: var(--hot); font-weight: 700; font-size: 0.7rem; }
+.tag-cold { color: var(--cold); font-weight: 700; font-size: 0.7rem; }
+.tag-normal { color: var(--text-dim); font-size: 0.7rem; }
+
+/* --- Verification --- */
+.verification-result-card {
+  background: var(--bg);
+  border-radius: 8px;
+  padding: 10px;
+  margin: 6px 0;
+}
+
+.match-count {
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+/* --- Stats Grid --- */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 1.2rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--accent);
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+/* --- Settings --- */
+.settings-section {
+  margin-bottom: 16px;
+}
+
+.settings-section h3 {
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+}
+
+.theme-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.theme-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-height: 36px;
+}
+
+.theme-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(245,158,11,0.1);
+}
+
+.toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.toggle-label { font-size: 0.85rem; }
+
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  top: 2px;
+  left: 3px;
+  transition: 0.3s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  background: #000;
+  transform: translateX(19px);
+}
+
+/* --- Weight Sliders --- */
+.weight-slider-row {
+  margin-bottom: 8px;
+}
+
+.weight-slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.weight-slider-row input[type="range"] {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 3px;
+  outline: none;
+}
+
+.weight-slider-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+/* --- Weight Bar (Verification) --- */
+.weight-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.weight-bar-label {
+  font-size: 0.7rem;
+  min-width: 70px;
+  color: var(--text-muted);
+}
+
+.weight-bar-track {
+  flex: 1;
+  height: 16px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.weight-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 4px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: #000;
+  transition: width 0.5s;
+  min-width: fit-content;
+}
+
+.weight-change {
+  font-size: 0.6rem;
+  font-weight: 700;
+  min-width: 40px;
+  text-align: right;
+}
+
+.weight-change.positive { color: var(--success); }
+.weight-change.negative { color: var(--danger); }
+
+/* --- Modal --- */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(4px);
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.modal-overlay.active { display: flex; }
+
+.modal-content {
+  background: var(--bg-card);
+  border-radius: 16px 16px 0 0;
+  padding: 20px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 85dvh;
+  overflow-y: auto;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.modal-header h2 {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+/* --- Number Grid --- */
+.number-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.number-grid button {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 36px;
+  transition: all 0.15s;
+}
+
+.number-grid button:active { transform: scale(0.9); }
+
+.number-grid button.selected {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 800;
+}
+
+.number-grid button.disabled-num {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.form-row {
+  margin-bottom: 12px;
+}
+
+.form-row label {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.form-row input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.form-error {
+  color: var(--danger);
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+
+.selected-display {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 4px 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.modal-actions .btn { flex: 1; }
+
+/* --- Popup (Ball Detail) --- */
+.popup-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(0,0,0,0.5);
+  align-items: center;
+  justify-content: center;
+}
+
+.popup-overlay.active { display: flex; }
+
+.popup-content {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 280px;
+  text-align: center;
+  animation: fadeUp 0.2s ease;
+}
+
+.popup-content .ball { width: 48px; height: 48px; font-size: 1.1rem; }
+
+.popup-stat {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.popup-stat-label { color: var(--text-muted); }
+.popup-stat-value { font-weight: 700; font-family: var(--font-mono); }
+
+/* --- Toast --- */
+#toast {
+  position: fixed;
+  bottom: calc(var(--tab-height) + var(--safe-bottom) + 20px);
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background: var(--accent);
+  color: #000;
+  padding: 10px 24px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  z-index: 400;
+  opacity: 0;
+  transition: all 0.3s;
+  pointer-events: none;
+}
+
+#toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* --- Loading --- */
+.loading-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0,0,0,0.8);
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.loading-overlay.active { display: flex; }
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.loading-text {
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+/* --- Backtest --- */
+.backtest-summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* --- Filters --- */
+.filter-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.filter-row select {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.8rem;
+  min-height: 36px;
+}
+
+/* --- Data management buttons --- */
+.data-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* --- Algorithm Tags --- */
+.algo-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.algo-tag {
+  font-size: 0.6rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-card-alt);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+/* --- Search --- */
+.search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+
+.search-input::placeholder { color: var(--text-dim); }
+
+/* --- Learning History --- */
+.learning-history {
+  margin-top: 8px;
+  font-size: 0.7rem;
+}
+
+.learning-history-item {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+/* --- QR --- */
+.qr-container {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: #fff;
+  border-radius: 12px;
+  margin: 8px 0;
+}
+
+/* --- Responsive --- */
+@media (min-width: 768px) {
+  .tab-content { padding: 16px 24px; max-width: 800px; margin: 0 auto; }
+  .stats-grid { grid-template-columns: repeat(4, 1fr); }
+  .backtest-summary { grid-template-columns: repeat(4, 1fr); }
+  .ball { width: 40px; height: 40px; font-size: 0.85rem; }
+  .modal-content { border-radius: 16px; margin: auto; max-height: 80vh; }
+  .modal-overlay { align-items: center; }
+}
+
+@media (min-width: 1024px) {
+  .tab-content { max-width: 960px; }
+}
+
+/* --- Animations --- */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse { animation: pulse 2s ease-in-out infinite; }
+
+/* --- No Records --- */
+.no-records {
+  text-align: center;
+  padding: 32px 16px;
+  color: var(--text-muted);
+}
+
+.no-records p { margin-bottom: 8px; }
+
+/* --- Scrollbar --- */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  </style>
+</head>
+<body data-theme="dark">
+
+  <!-- Header -->
+  <header class="app-header">
+    <span class="app-title">ロト6 AI予測ラボ</span>
+    <span class="header-info" id="nextDrawInfo"></span>
+  </header>
+
+  <!-- Tab Contents -->
+  <main>
+    <!-- 1. Predict -->
+    <section id="tabPredict" class="tab-content active">
+      <div id="dashboardWidgets" class="dashboard-widgets"></div>
+      <div id="schedulerStatus" class="status-bar"></div>
+      <div id="lockBanner"></div>
+      <div id="predictionsDisplay"></div>
+      <div class="algo-tags" id="algoTags"></div>
+      <button class="btn btn-primary" id="btnGenerate">予測を生成</button>
+      <button class="btn btn-advanced" id="btnAdvanced">AI高度探索</button>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。本アプリは統計的傾向とAIアルゴリズムに基づく参考値を生成するもので、当選を保証するものではありません。
+      </div>
+    </section>
+
+    <!-- 2. Analysis -->
+    <section id="tabAnalysis" class="tab-content">
+      <div class="period-selector">
+        <button class="period-btn active" data-period="10">直近10回</button>
+        <button class="period-btn" data-period="20">直近20回</button>
+        <button class="period-btn" data-period="50">直近50回</button>
+        <button class="period-btn" data-period="all">全期間</button>
+      </div>
+      <div id="analysisContent"></div>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。統計分析は過去の傾向を示すもので、将来の結果を予測するものではありません。
+      </div>
+    </section>
+
+    <!-- 3. History -->
+    <section id="tabHistory" class="tab-content">
+      <div id="latestDraw" class="card"></div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn btn-sm btn-secondary" id="btnFetchResult">結果を自動取得</button>
+        <button class="btn btn-sm btn-primary" id="btnAddDraw">+ 結果を追加</button>
+      </div>
+      <input type="text" class="search-input" id="historySearch" placeholder="番号で検索（例: 17）">
+      <div id="historyList"></div>
+      <button class="btn btn-secondary btn-sm" id="btnLoadMore" style="display:none;width:100%;margin-top:8px">もっと表示</button>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。本アプリは当選を保証するものではありません。
+      </div>
+    </section>
+
+    <!-- 4. Records -->
+    <section id="tabRecords" class="tab-content">
+      <div id="recordsSummary" class="stats-grid"></div>
+      <div class="filter-row">
+        <select id="recordsFilter">
+          <option value="all">全件</option>
+          <option value="verified">検証済み</option>
+          <option value="unverified">未検証</option>
+        </select>
+        <select id="recordsSort">
+          <option value="newest">新しい順</option>
+          <option value="oldest">古い順</option>
+          <option value="bestmatch">一致数順</option>
+        </select>
+      </div>
+      <div id="recordsList"></div>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。本アプリは当選を保証するものではありません。
+      </div>
+    </section>
+
+    <!-- 5. Verify -->
+    <section id="tabVerify" class="tab-content">
+      <button class="btn btn-primary" id="btnVerify" style="margin-bottom:12px">未検証をすべて検証</button>
+      <div id="latestVerification"></div>
+      <div id="verificationStats"></div>
+      <div id="accuracyTrendSection"></div>
+      <div id="learningStatus" class="card"></div>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。本アプリは当選を保証するものではありません。
+      </div>
+    </section>
+
+    <!-- 6. Backtest -->
+    <section id="tabBacktest" class="tab-content">
+      <div class="card">
+        <h3>バックテスト</h3>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:12px">
+          過去のデータに対して現在のアルゴリズムで予想を生成し、的中率をシミュレーションします。
+        </p>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn btn-primary btn-sm" id="btnBacktest50" data-n="50">直近50回</button>
+          <button class="btn btn-primary btn-sm" id="btnBacktest100" data-n="100">直近100回</button>
+        </div>
+        <div id="backtestProgress" style="font-size:0.75rem;color:var(--text-muted)"></div>
+      </div>
+      <div id="backtestSummary"></div>
+      <div id="backtestChart" class="card" style="display:none">
+        <h3>一致数推移</h3>
+        <div class="chart-container" style="height:250px"><canvas id="chartBacktest"></canvas></div>
+      </div>
+      <div id="backtestDetails"></div>
+      <div class="disclaimer">
+        ロト6は完全にランダムな抽選です。バックテストは過去データに対するシミュレーションであり、将来の結果を保証するものではありません。
+      </div>
+    </section>
+
+    <!-- 7. Settings -->
+    <section id="tabSettings" class="tab-content">
+      <div class="card settings-section">
+        <h3>テーマ</h3>
+        <div class="theme-buttons">
+          <button class="theme-btn" data-theme="dark">ダーク</button>
+          <button class="theme-btn" data-theme="light">ライト</button>
+          <button class="theme-btn" data-theme="system">自動</button>
+        </div>
+      </div>
+
+      <div class="card settings-section">
+        <h3>自動学習</h3>
+        <div class="toggle-row">
+          <span class="toggle-label">検証時に自動学習</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggleAutoLearn">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <button class="btn btn-sm btn-secondary" id="btnApplyLearned" style="margin-top:8px">学習済みの値を適用</button>
+      </div>
+
+      <div class="card settings-section">
+        <h3>重み設定（W1〜W12）</h3>
+        <div id="weightsSliders"></div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn btn-sm btn-secondary" id="btnResetWeights">デフォルトに戻す</button>
+        </div>
+        <div class="chart-container" style="height:200px;margin-top:12px"><canvas id="chartWeights"></canvas></div>
+      </div>
+
+      <div class="card settings-section">
+        <h3>データ管理</h3>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">
+          <div id="dataRange"></div>
+          <div id="dataInfo"></div>
+        </div>
+        <div class="data-buttons">
+          <button class="btn btn-sm btn-secondary" id="btnExport">エクスポート (JSON)</button>
+          <button class="btn btn-sm btn-secondary" id="btnImport">インポート</button>
+          <input type="file" id="fileImport" accept=".json" style="display:none">
+          <button class="btn btn-sm btn-danger" id="btnResetData">全データリセット</button>
+        </div>
+      </div>
+
+      <div class="card settings-section">
+        <h3>QRコード同期</h3>
+        <p style="font-size:0.75rem;color:var(--text-muted);margin-bottom:8px">
+          データをQRコードで別端末に転送します。
+        </p>
+        <button class="btn btn-sm btn-secondary" id="btnShowQR">QRコードを生成</button>
+        <div id="qrDisplay"></div>
+      </div>
+
+      <div class="card settings-section">
+        <h3>アプリ情報</h3>
+        <p style="font-size:0.75rem;color:var(--text-muted)">
+          ロト6 AI予測ラボ v3.0<br>
+          搭載AI: モンテカルロ / 遺伝的アルゴリズム / 焼きなまし法 / エントロピー最適化 / 相関ネットワーク / トレンド追従 / 出遅れ回帰
+        </p>
+        <div class="disclaimer" style="border-top:none;margin-top:8px;text-align:left">
+          免責事項: ロト6は完全にランダムな抽選です。本アプリは統計的な傾向とAIアルゴリズムに基づく参考値を生成するもので、当選を保証するものではありません。宝くじの購入は自己責任でお願いいたします。
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Tab Bar -->
+  <nav class="tab-bar">
+    <button class="tab-item active" data-tab="tabPredict">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      予想
+    </button>
+    <button class="tab-item" data-tab="tabAnalysis">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      分析
+    </button>
+    <button class="tab-item" data-tab="tabHistory">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      履歴
+    </button>
+    <button class="tab-item" data-tab="tabRecords">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      記録
+    </button>
+    <button class="tab-item" data-tab="tabVerify">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      検証
+    </button>
+    <button class="tab-item" data-tab="tabBacktest">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+      BT
+    </button>
+    <button class="tab-item" data-tab="tabSettings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><circle cx="12" cy="12" r="3"/></svg>
+      設定
+    </button>
+  </nav>
+
+  <!-- Add Draw Modal -->
+  <div class="modal-overlay" id="addDrawModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>抽選結果を追加</h2>
+        <button class="modal-close" id="modalClose">&times;</button>
+      </div>
+      <div class="form-row">
+        <label>回号</label>
+        <input type="number" id="inputDrawId" min="1">
+      </div>
+      <div class="form-row">
+        <label>抽選日</label>
+        <input type="date" id="inputDrawDate">
+      </div>
+      <div class="form-row">
+        <label>本数字（6個選択）</label>
+        <div class="number-grid" id="numberGrid"></div>
+        <div class="selected-display" id="selectedNums">選択: なし</div>
+      </div>
+      <div class="form-row">
+        <label>ボーナス数字（1個選択）</label>
+        <div class="number-grid" id="bonusGrid"></div>
+        <div class="selected-display" id="selectedBonus">選択: なし</div>
+      </div>
+      <div class="form-error" id="formError"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="modalCancel">キャンセル</button>
+        <button class="btn btn-primary" id="modalSave">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ball Detail Popup -->
+  <div class="popup-overlay" id="ballDetailPopup">
+    <div class="popup-content" id="ballDetailContent"></div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">AIが予測を生成中...</div>
+  </div>
+
+
+  <!-- CDN Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+  <!-- Inline Application Code -->
+  <script>
+
+// ===== data.js =====
+// Loto6 lottery draw data
+// Each entry: id (draw number), date, nums (6 main numbers sorted ascending), bonus number
+// Numbers range from 1-43, draws occur on Mondays and Thursdays
+const LOTO6_BUILTIN_DATA = [
+  { id: 2084, date: "2026-03-12", nums: [2,8,15,16,18,41], bonus: 11 },
+  { id: 2083, date: "2026-03-09", nums: [3,6,7,28,35,38], bonus: 2 },
+  { id: 2082, date: "2026-03-05", nums: [2,6,14,15,33,39], bonus: 42 },
+  { id: 2081, date: "2026-03-02", nums: [13,15,27,29,35,42], bonus: 20 },
+  { id: 2080, date: "2026-02-26", nums: [1,10,11,18,22,28], bonus: 17 },
+  { id: 2079, date: "2026-02-23", nums: [6,7,22,23,25,42], bonus: 28 },
+  { id: 2078, date: "2026-02-19", nums: [3,8,17,30,35,39], bonus: 28 },
+  { id: 2077, date: "2026-02-16", nums: [6,19,24,36,37,40], bonus: 14 },
+  { id: 2076, date: "2026-02-12", nums: [3,5,6,15,19,41], bonus: 10 },
+  { id: 2075, date: "2026-02-09", nums: [11,18,24,25,30,40], bonus: 27 },
+  { id: 2074, date: "2026-02-05", nums: [5,11,14,18,35,39], bonus: 20 },
+  { id: 2073, date: "2026-02-02", nums: [11,15,18,25,30,36], bonus: 24 },
+  { id: 2072, date: "2026-01-29", nums: [3,4,15,18,21,26], bonus: 7 },
+  { id: 2071, date: "2026-01-26", nums: [14,21,26,32,37,43], bonus: 34 },
+  { id: 2070, date: "2026-01-22", nums: [9,10,16,17,35,36], bonus: 21 },
+  { id: 2069, date: "2026-01-19", nums: [15,24,26,28,38,43], bonus: 9 },
+  { id: 2068, date: "2026-01-15", nums: [4,6,8,10,32,33], bonus: 15 },
+  { id: 2067, date: "2026-01-12", nums: [5,25,28,30,39,40], bonus: 38 },
+  { id: 2066, date: "2026-01-08", nums: [1,8,17,18,35,36], bonus: 26 },
+  { id: 2065, date: "2026-01-05", nums: [1,8,11,19,28,30], bonus: 21 },
+  { id: 2064, date: "2026-01-01", nums: [7,12,20,33,41,43], bonus: 15 },
+  { id: 2063, date: "2025-12-29", nums: [1,10,11,24,34,35], bonus: 25 },
+  { id: 2062, date: "2025-12-25", nums: [2,8,16,20,24,32], bonus: 5 },
+  { id: 2061, date: "2025-12-22", nums: [5,6,16,32,37,41], bonus: 40 },
+  { id: 2060, date: "2025-12-18", nums: [9,11,17,31,36,43], bonus: 39 },
+  { id: 2059, date: "2025-12-15", nums: [13,14,20,28,35,39], bonus: 30 },
+  { id: 2058, date: "2025-12-11", nums: [24,29,34,40,42,43], bonus: 8 },
+  { id: 2057, date: "2025-12-08", nums: [2,5,15,16,22,38], bonus: 42 },
+  { id: 2056, date: "2025-12-04", nums: [1,4,5,15,38,43], bonus: 19 },
+  { id: 2055, date: "2025-12-01", nums: [3,5,16,22,33,43], bonus: 21 },
+  { id: 2054, date: "2025-11-27", nums: [9,14,32,35,37,43], bonus: 42 },
+  { id: 2053, date: "2025-11-24", nums: [7,13,16,27,31,43], bonus: 8 },
+  { id: 2052, date: "2025-11-20", nums: [23,27,28,30,42,43], bonus: 4 },
+  { id: 2051, date: "2025-11-17", nums: [4,7,22,26,42,43], bonus: 9 },
+  { id: 2050, date: "2025-11-13", nums: [9,13,16,29,35,42], bonus: 32 },
+  { id: 2049, date: "2025-11-10", nums: [5,12,16,18,29,30], bonus: 42 },
+  { id: 2048, date: "2025-11-06", nums: [1,4,6,7,16,35], bonus: 15 },
+  { id: 2047, date: "2025-11-03", nums: [4,14,26,27,31,32], bonus: 12 },
+  { id: 2046, date: "2025-10-30", nums: [1,17,19,25,30,43], bonus: 33 },
+  { id: 2045, date: "2025-10-27", nums: [10,13,14,19,32,36], bonus: 4 },
+  { id: 2044, date: "2025-10-23", nums: [4,21,35,38,39,41], bonus: 33 },
+  { id: 2043, date: "2025-10-20", nums: [4,6,11,33,34,43], bonus: 15 },
+  { id: 2042, date: "2025-10-16", nums: [5,8,16,26,39,43], bonus: 42 },
+  { id: 2041, date: "2025-10-13", nums: [3,6,16,27,38,39], bonus: 43 },
+  { id: 2040, date: "2025-10-09", nums: [14,16,17,21,34,42], bonus: 20 },
+  { id: 2039, date: "2025-10-06", nums: [5,9,20,21,26,30], bonus: 1 },
+  { id: 2038, date: "2025-10-02", nums: [5,7,30,35,37,40], bonus: 16 },
+  { id: 2037, date: "2025-09-29", nums: [5,9,16,17,23,33], bonus: 29 },
+  { id: 2036, date: "2025-09-25", nums: [11,19,20,29,34,35], bonus: 1 },
+  { id: 2035, date: "2025-09-22", nums: [7,9,17,20,36,43], bonus: 10 },
+  { id: 2034, date: "2025-09-18", nums: [7,10,14,18,19,36], bonus: 27 },
+  { id: 2033, date: "2025-09-15", nums: [14,17,32,33,41,42], bonus: 4 },
+  { id: 2032, date: "2025-09-11", nums: [1,3,6,18,28,41], bonus: 26 },
+  { id: 2031, date: "2025-09-08", nums: [9,11,17,29,36,41], bonus: 32 },
+  { id: 2030, date: "2025-09-04", nums: [1,5,8,10,35,36], bonus: 4 },
+  { id: 2029, date: "2025-09-01", nums: [9,10,24,28,36,38], bonus: 3 },
+  { id: 2028, date: "2025-08-28", nums: [3,14,16,20,23,24], bonus: 8 },
+  { id: 2027, date: "2025-08-25", nums: [10,16,23,27,36,40], bonus: 12 },
+  { id: 2026, date: "2025-08-21", nums: [2,12,22,27,42,43], bonus: 18 },
+  { id: 2025, date: "2025-08-18", nums: [3,7,11,18,25,31], bonus: 19 },
+  { id: 2024, date: "2025-08-14", nums: [13,15,20,23,30,39], bonus: 2 },
+  { id: 2023, date: "2025-08-11", nums: [5,13,18,22,26,43], bonus: 21 },
+  { id: 2022, date: "2025-08-07", nums: [22,23,26,33,35,42], bonus: 2 },
+  { id: 2021, date: "2025-08-04", nums: [3,8,12,17,38,42], bonus: 9 },
+  { id: 2020, date: "2025-07-31", nums: [21,23,28,33,39,42], bonus: 8 },
+  { id: 2019, date: "2025-07-28", nums: [3,13,17,25,28,37], bonus: 1 },
+  { id: 2018, date: "2025-07-24", nums: [5,13,24,28,34,35], bonus: 25 },
+  { id: 2017, date: "2025-07-21", nums: [8,20,21,33,40,43], bonus: 30 },
+  { id: 2016, date: "2025-07-17", nums: [9,13,19,21,26,36], bonus: 32 },
+  { id: 2015, date: "2025-07-14", nums: [12,20,25,37,40,43], bonus: 29 },
+  { id: 2014, date: "2025-07-10", nums: [1,14,19,20,28,36], bonus: 25 },
+  { id: 2013, date: "2025-07-07", nums: [14,29,30,31,33,42], bonus: 11 },
+  { id: 2012, date: "2025-07-03", nums: [6,19,22,33,42,43], bonus: 17 },
+  { id: 2011, date: "2025-06-30", nums: [2,3,10,13,15,20], bonus: 22 },
+  { id: 2010, date: "2025-06-26", nums: [5,27,30,31,37,40], bonus: 14 },
+  { id: 2009, date: "2025-06-23", nums: [1,10,16,25,26,32], bonus: 8 },
+  { id: 2008, date: "2025-06-19", nums: [4,12,15,28,30,34], bonus: 42 },
+  { id: 2007, date: "2025-06-16", nums: [8,9,16,30,34,41], bonus: 42 },
+  { id: 2006, date: "2025-06-12", nums: [21,28,29,33,39,40], bonus: 42 },
+  { id: 2005, date: "2025-06-09", nums: [11,16,17,29,31,43], bonus: 21 },
+  { id: 2004, date: "2025-06-05", nums: [16,18,29,32,34,41], bonus: 5 },
+  { id: 2003, date: "2025-06-02", nums: [16,18,19,21,22,35], bonus: 6 },
+  { id: 2002, date: "2025-05-29", nums: [9,10,14,15,25,42], bonus: 5 },
+  { id: 2001, date: "2025-05-26", nums: [22,27,30,35,42,43], bonus: 4 },
+  { id: 2000, date: "2025-05-22", nums: [2,14,25,27,37,38], bonus: 29 },
+  { id: 1999, date: "2025-05-19", nums: [1,20,23,25,27,31], bonus: 41 },
+  { id: 1998, date: "2025-05-15", nums: [15,18,32,35,39,41], bonus: 30 },
+  { id: 1997, date: "2025-05-12", nums: [2,11,22,25,26,32], bonus: 36 },
+  { id: 1996, date: "2025-05-08", nums: [2,9,26,35,38,40], bonus: 43 },
+  { id: 1995, date: "2025-05-05", nums: [2,6,9,28,30,43], bonus: 15 },
+  { id: 1994, date: "2025-05-01", nums: [4,14,17,21,25,30], bonus: 26 },
+  { id: 1993, date: "2025-04-28", nums: [6,17,18,22,25,27], bonus: 37 },
+  { id: 1992, date: "2025-04-24", nums: [2,4,5,15,23,35], bonus: 6 },
+  { id: 1991, date: "2025-04-21", nums: [2,10,13,16,42,43], bonus: 11 },
+  { id: 1990, date: "2025-04-17", nums: [8,14,17,30,31,37], bonus: 27 },
+  { id: 1989, date: "2025-04-14", nums: [8,11,20,39,42,43], bonus: 7 },
+  { id: 1988, date: "2025-04-10", nums: [2,20,25,26,37,38], bonus: 14 },
+  { id: 1987, date: "2025-04-07", nums: [5,7,16,20,38,41], bonus: 10 },
+  { id: 1986, date: "2025-04-03", nums: [3,23,24,28,35,37], bonus: 6 },
+  { id: 1985, date: "2025-03-31", nums: [1,22,27,32,33,42], bonus: 8 },
+  { id: 1984, date: "2025-03-27", nums: [10,24,28,30,41,43], bonus: 13 },
+  { id: 1983, date: "2025-03-24", nums: [18,31,34,35,40,42], bonus: 32 },
+  { id: 1982, date: "2025-03-20", nums: [6,16,18,21,28,38], bonus: 22 },
+  { id: 1981, date: "2025-03-17", nums: [16,22,25,29,30,37], bonus: 2 },
+  { id: 1980, date: "2025-03-13", nums: [12,14,21,23,32,43], bonus: 19 },
+  { id: 1979, date: "2025-03-10", nums: [1,18,22,36,39,42], bonus: 38 },
+  { id: 1978, date: "2025-03-06", nums: [6,13,16,27,32,36], bonus: 19 },
+  { id: 1977, date: "2025-03-03", nums: [2,6,29,31,32,42], bonus: 21 },
+  { id: 1976, date: "2025-02-27", nums: [15,16,20,24,26,38], bonus: 36 },
+  { id: 1975, date: "2025-02-24", nums: [22,23,28,34,36,43], bonus: 25 },
+  { id: 1974, date: "2025-02-20", nums: [8,15,17,18,20,30], bonus: 14 },
+  { id: 1973, date: "2025-02-17", nums: [8,12,13,14,21,35], bonus: 37 },
+  { id: 1972, date: "2025-02-13", nums: [7,18,19,34,38,39], bonus: 14 },
+  { id: 1971, date: "2025-02-10", nums: [1,12,15,19,20,24], bonus: 41 },
+  { id: 1970, date: "2025-02-06", nums: [3,4,9,18,19,36], bonus: 12 },
+  { id: 1969, date: "2025-02-03", nums: [1,7,19,32,37,41], bonus: 35 },
+  { id: 1968, date: "2025-01-30", nums: [4,12,17,22,29,31], bonus: 37 },
+  { id: 1967, date: "2025-01-27", nums: [5,8,26,32,37,42], bonus: 4 },
+  { id: 1966, date: "2025-01-23", nums: [6,10,16,20,37,43], bonus: 9 },
+  { id: 1965, date: "2025-01-20", nums: [15,27,34,36,39,41], bonus: 26 },
+  { id: 1964, date: "2025-01-16", nums: [20,28,29,38,41,43], bonus: 42 },
+  { id: 1963, date: "2025-01-13", nums: [4,7,14,39,40,43], bonus: 20 },
+  { id: 1962, date: "2025-01-09", nums: [6,11,12,16,36,43], bonus: 5 },
+  { id: 1961, date: "2025-01-06", nums: [1,11,27,29,31,39], bonus: 21 },
+  { id: 1960, date: "2025-01-02", nums: [3,5,15,19,30,41], bonus: 18 },
+  { id: 1959, date: "2024-12-30", nums: [8,13,17,28,38,41], bonus: 40 },
+  { id: 1958, date: "2024-12-26", nums: [5,10,15,18,41,42], bonus: 4 },
+  { id: 1957, date: "2024-12-23", nums: [11,19,20,29,37,39], bonus: 8 },
+  { id: 1956, date: "2024-12-19", nums: [18,20,26,30,33,35], bonus: 38 },
+  { id: 1955, date: "2024-12-16", nums: [3,6,21,28,29,39], bonus: 19 },
+  { id: 1954, date: "2024-12-12", nums: [2,6,15,37,38,43], bonus: 21 },
+  { id: 1953, date: "2024-12-09", nums: [3,12,29,31,34,37], bonus: 20 },
+  { id: 1952, date: "2024-12-05", nums: [6,12,28,31,32,38], bonus: 25 },
+  { id: 1951, date: "2024-12-02", nums: [7,11,21,22,27,42], bonus: 32 },
+  { id: 1950, date: "2024-11-28", nums: [3,19,26,30,32,36], bonus: 7 },
+  { id: 1949, date: "2024-11-25", nums: [8,17,21,26,33,43], bonus: 1 },
+  { id: 1948, date: "2024-11-21", nums: [4,13,27,30,35,43], bonus: 39 },
+  { id: 1947, date: "2024-11-18", nums: [4,14,24,29,32,40], bonus: 20 },
+  { id: 1946, date: "2024-11-14", nums: [8,9,19,29,32,36], bonus: 2 },
+  { id: 1945, date: "2024-11-11", nums: [11,16,20,36,39,41], bonus: 1 },
+  { id: 1944, date: "2024-11-07", nums: [6,8,15,27,30,36], bonus: 10 },
+  { id: 1943, date: "2024-11-04", nums: [10,18,19,32,33,42], bonus: 30 },
+  { id: 1942, date: "2024-10-31", nums: [10,16,30,31,36,43], bonus: 27 },
+  { id: 1941, date: "2024-10-28", nums: [5,9,13,18,33,39], bonus: 31 },
+  { id: 1940, date: "2024-10-24", nums: [1,18,19,20,22,33], bonus: 38 },
+  { id: 1939, date: "2024-10-21", nums: [10,22,23,29,31,35], bonus: 42 },
+  { id: 1938, date: "2024-10-17", nums: [13,16,21,25,30,35], bonus: 43 },
+  { id: 1937, date: "2024-10-14", nums: [3,15,21,25,27,31], bonus: 30 },
+  { id: 1936, date: "2024-10-10", nums: [3,9,10,25,32,42], bonus: 38 },
+  { id: 1935, date: "2024-10-07", nums: [7,22,29,34,38,41], bonus: 33 },
+  { id: 1934, date: "2024-10-03", nums: [1,5,10,27,31,42], bonus: 20 },
+  { id: 1933, date: "2024-09-30", nums: [6,22,26,35,40,43], bonus: 28 },
+  { id: 1932, date: "2024-09-26", nums: [3,5,21,32,35,41], bonus: 18 },
+  { id: 1931, date: "2024-09-23", nums: [6,7,15,19,28,41], bonus: 9 },
+  { id: 1930, date: "2024-09-19", nums: [2,3,11,20,21,29], bonus: 6 },
+  { id: 1929, date: "2024-09-16", nums: [10,16,19,23,24,28], bonus: 40 },
+  { id: 1928, date: "2024-09-12", nums: [6,11,12,27,37,41], bonus: 29 },
+  { id: 1927, date: "2024-09-09", nums: [10,15,16,32,38,40], bonus: 34 },
+  { id: 1926, date: "2024-09-05", nums: [1,17,30,41,42,43], bonus: 21 },
+  { id: 1925, date: "2024-09-02", nums: [5,11,23,29,35,38], bonus: 22 },
+  { id: 1924, date: "2024-08-29", nums: [13,17,20,28,30,41], bonus: 29 },
+  { id: 1923, date: "2024-08-26", nums: [7,16,23,25,31,37], bonus: 43 },
+  { id: 1922, date: "2024-08-22", nums: [1,2,18,19,26,43], bonus: 42 },
+  { id: 1921, date: "2024-08-19", nums: [4,15,19,23,32,39], bonus: 17 },
+  { id: 1920, date: "2024-08-15", nums: [7,9,13,17,40,41], bonus: 3 },
+  { id: 1919, date: "2024-08-12", nums: [3,9,20,24,29,38], bonus: 7 },
+  { id: 1918, date: "2024-08-08", nums: [9,12,13,19,21,27], bonus: 41 },
+  { id: 1917, date: "2024-08-05", nums: [11,17,18,24,33,34], bonus: 37 },
+  { id: 1916, date: "2024-08-01", nums: [5,8,10,19,22,30], bonus: 18 },
+  { id: 1915, date: "2024-07-29", nums: [1,6,24,26,36,43], bonus: 19 },
+  { id: 1914, date: "2024-07-25", nums: [8,17,24,30,35,38], bonus: 28 },
+  { id: 1913, date: "2024-07-22", nums: [2,7,15,24,31,41], bonus: 42 },
+  { id: 1912, date: "2024-07-18", nums: [5,15,20,21,30,40], bonus: 32 },
+  { id: 1911, date: "2024-07-15", nums: [3,8,9,20,32,41], bonus: 11 },
+  { id: 1910, date: "2024-07-11", nums: [7,9,16,25,30,35], bonus: 28 },
+  { id: 1909, date: "2024-07-08", nums: [10,27,35,38,41,43], bonus: 7 },
+  { id: 1908, date: "2024-07-04", nums: [3,18,24,27,32,40], bonus: 15 },
+  { id: 1907, date: "2024-07-01", nums: [7,16,24,29,40,43], bonus: 39 },
+  { id: 1906, date: "2024-06-27", nums: [4,13,18,23,26,42], bonus: 9 },
+  { id: 1905, date: "2024-06-24", nums: [2,4,6,14,30,39], bonus: 26 },
+  { id: 1904, date: "2024-06-20", nums: [5,9,14,16,36,37], bonus: 18 },
+  { id: 1903, date: "2024-06-17", nums: [1,10,14,15,22,38], bonus: 23 },
+  { id: 1902, date: "2024-06-13", nums: [8,9,10,12,17,35], bonus: 2 },
+  { id: 1901, date: "2024-06-10", nums: [1,9,16,21,23,38], bonus: 3 },
+  { id: 1900, date: "2024-06-06", nums: [4,9,12,17,27,34], bonus: 10 },
+  { id: 1899, date: "2024-06-03", nums: [5,24,29,31,33,38], bonus: 8 },
+  { id: 1898, date: "2024-05-30", nums: [3,15,29,33,34,40], bonus: 22 },
+  { id: 1897, date: "2024-05-27", nums: [2,4,26,30,31,42], bonus: 33 },
+  { id: 1896, date: "2024-05-23", nums: [5,6,7,21,29,32], bonus: 13 },
+  { id: 1895, date: "2024-05-20", nums: [5,9,18,36,38,40], bonus: 24 },
+  { id: 1894, date: "2024-05-16", nums: [19,25,30,33,34,39], bonus: 31 },
+  { id: 1893, date: "2024-05-13", nums: [7,8,14,28,29,36], bonus: 18 },
+  { id: 1892, date: "2024-05-09", nums: [7,22,26,27,30,43], bonus: 23 },
+  { id: 1891, date: "2024-05-06", nums: [10,17,21,24,28,31], bonus: 5 },
+  { id: 1890, date: "2024-05-02", nums: [6,7,24,28,42,43], bonus: 11 },
+  { id: 1889, date: "2024-04-29", nums: [4,22,36,38,40,43], bonus: 9 },
+  { id: 1888, date: "2024-04-25", nums: [4,19,20,23,27,28], bonus: 29 },
+  { id: 1887, date: "2024-04-22", nums: [7,10,14,31,33,37], bonus: 18 },
+  { id: 1886, date: "2024-04-18", nums: [7,8,18,23,24,36], bonus: 43 },
+  { id: 1885, date: "2024-04-15", nums: [2,15,28,36,40,41], bonus: 20 },
+  { id: 1884, date: "2024-04-11", nums: [2,12,18,20,22,23], bonus: 1 },
+  { id: 1883, date: "2024-04-08", nums: [5,10,12,26,37,42], bonus: 2 },
+  { id: 1882, date: "2024-04-04", nums: [6,14,25,27,30,34], bonus: 24 },
+  { id: 1881, date: "2024-04-01", nums: [6,11,20,21,24,37], bonus: 4 },
+  { id: 1880, date: "2024-03-28", nums: [4,6,10,11,18,40], bonus: 34 },
+  { id: 1879, date: "2024-03-25", nums: [27,28,29,32,39,43], bonus: 18 },
+  { id: 1878, date: "2024-03-21", nums: [8,14,23,28,33,41], bonus: 21 },
+  { id: 1877, date: "2024-03-18", nums: [3,15,20,32,34,38], bonus: 29 },
+  { id: 1876, date: "2024-03-14", nums: [1,4,14,20,39,40], bonus: 11 },
+  { id: 1875, date: "2024-03-11", nums: [1,8,17,19,21,32], bonus: 34 }
+];
+
+
+// ===== storage.js =====
+/* ===== localStorage Operations (v3 Enhanced - W1-W12) ===== */
+
+const Storage = (() => {
+  'use strict';
+
+  const KEYS = {
+    userDraws: 'loto6_user_draws',
+    predictions: 'loto6_predictions',
+    verifications: 'loto6_verifications',
+    settings: 'loto6_settings',
+    learningHistory: 'loto6_learning_history',
+    schedulerState: 'loto6_scheduler',
+    backtestResults: 'loto6_backtest',
+  };
+
+  const DEFAULT_WEIGHTS = {
+    W1: 0.16,  // freq
+    W2: 0.12,  // dormancy
+    W3: 0.08,  // entropy
+    W4: 0.08,  // oddEven
+    W5: 0.08,  // sumBalance
+    W6: 0.07,  // spread
+    W7: 0.07,  // range
+    W8: 0.08,  // correlation
+    W9: 0.07,  // trend
+    W10: 0.05, // weekday
+    W11: 0.07, // cycle
+    W12: 0.07, // triplet
+  };
+
+  const WEIGHT_LABELS = {
+    W1: '出現頻度', W2: '出遅れ度', W3: 'エントロピー', W4: '奇偶バランス',
+    W5: '合計値バランス', W6: '分散', W7: '番号帯', W8: 'ペア相関',
+    W9: 'トレンド', W10: '曜日傾向', W11: '出現周期', W12: 'トリプレット',
+  };
+
+  const DEFAULT_SETTINGS = {
+    theme: 'dark',
+    autoLearn: true,
+    weights: { ...DEFAULT_WEIGHTS },
+  };
+
+  function _get(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      return v ? JSON.parse(v) : fallback;
+    } catch (e) { return fallback; }
+  }
+
+  function _set(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) { }
+  }
+
+  function getUserDraws() { return _get(KEYS.userDraws, []); }
+  function saveUserDraw(draw) {
+    const draws = getUserDraws();
+    const idx = draws.findIndex(d => d.id === draw.id);
+    if (idx >= 0) draws[idx] = draw; else draws.push(draw);
+    draws.sort((a, b) => b.id - a.id);
+    _set(KEYS.userDraws, draws);
+  }
+
+  function getPredictions() { return _get(KEYS.predictions, []); }
+  function savePrediction(pred) {
+    const preds = getPredictions();
+    preds.unshift(pred);
+    _set(KEYS.predictions, preds);
+  }
+  function updatePrediction(targetDrawId, updates) {
+    const preds = getPredictions();
+    const idx = preds.findIndex(p => p.targetDrawId === targetDrawId);
+    if (idx >= 0) Object.assign(preds[idx], updates);
+    _set(KEYS.predictions, preds);
+  }
+
+  function getVerifications() { return _get(KEYS.verifications, []); }
+  function saveVerification(ver) {
+    const vers = getVerifications();
+    const idx = vers.findIndex(v => v.targetDrawId === ver.targetDrawId);
+    if (idx >= 0) vers[idx] = ver; else vers.unshift(ver);
+    _set(KEYS.verifications, vers);
+  }
+
+  function getSettings() {
+    const s = _get(KEYS.settings, null);
+    if (!s) return JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
+    return {
+      theme: s.theme || DEFAULT_SETTINGS.theme,
+      autoLearn: s.autoLearn !== undefined ? s.autoLearn : true,
+      weights: { ...DEFAULT_WEIGHTS, ...(s.weights || {}) },
+    };
+  }
+
+  function saveSettings(s) { _set(KEYS.settings, s); }
+
+  function getWeights() { return getSettings().weights; }
+  function saveWeights(w) {
+    const s = getSettings();
+    s.weights = w;
+    saveSettings(s);
+  }
+
+  function getLearningHistory() { return _get(KEYS.learningHistory, []); }
+  function saveLearningEntry(entry) {
+    const h = getLearningHistory();
+    h.unshift(entry);
+    if (h.length > 50) h.length = 50;
+    _set(KEYS.learningHistory, h);
+  }
+
+  function getSchedulerState() { return _get(KEYS.schedulerState, null); }
+  function saveSchedulerState(state) { _set(KEYS.schedulerState, state); }
+
+  function getBacktestResults() { return _get(KEYS.backtestResults, null); }
+  function saveBacktestResults(results) { _set(KEYS.backtestResults, results); }
+
+  function exportAll() {
+    const data = {};
+    for (const [name, key] of Object.entries(KEYS)) {
+      data[name] = _get(key, null);
+    }
+    data._exportedAt = new Date().toISOString();
+    data._version = 'v3';
+    return data;
+  }
+
+  function importAll(data) {
+    for (const [name, key] of Object.entries(KEYS)) {
+      if (data[name] !== undefined && data[name] !== null) {
+        _set(key, data[name]);
+      }
+    }
+  }
+
+  function resetAll() {
+    for (const key of Object.values(KEYS)) localStorage.removeItem(key);
+  }
+
+  function getStorageSize() {
+    let total = 0;
+    for (const key of Object.values(KEYS)) {
+      const v = localStorage.getItem(key);
+      if (v) total += v.length * 2;
+    }
+    return total;
+  }
+
+  return {
+    getUserDraws, saveUserDraw,
+    getPredictions, savePrediction, updatePrediction,
+    getVerifications, saveVerification,
+    getSettings, saveSettings, getWeights, saveWeights,
+    getLearningHistory, saveLearningEntry,
+    getSchedulerState, saveSchedulerState,
+    getBacktestResults, saveBacktestResults,
+    exportAll, importAll, resetAll, getStorageSize,
+    DEFAULT_SETTINGS, DEFAULT_WEIGHTS, WEIGHT_LABELS,
+  };
+})();
+
+
+// ===== utils.js =====
+/* ===== Utility Functions (v3 Enhanced) ===== */
+
+const Utils = (() => {
+  'use strict';
+  const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+
+  function getWeekday(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return WEEKDAYS[d.getDay()];
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function formatDateTime(isoStr) {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  function toDateStr(d) {
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function nextDrawDate(fromDate) {
+    const d = fromDate ? new Date(fromDate) : new Date();
+    d.setHours(0,0,0,0);
+    const dow = d.getDay();
+    let daysToMon = (8 - dow) % 7;
+    let daysToThu = (11 - dow) % 7;
+    if (daysToMon === 0) daysToMon = 7;
+    if (daysToThu === 0) daysToThu = 7;
+    const next = Math.min(daysToMon, daysToThu);
+    const nd = new Date(d);
+    nd.setDate(nd.getDate() + next);
+    return nd;
+  }
+
+  function nextDrawInfo() {
+    const nd = nextDrawDate();
+    const dateStr = toDateStr(nd);
+    const weekday = WEEKDAYS[nd.getDay()];
+    const allData = getAllDrawData();
+    const lastId = allData.length > 0 ? allData[0].id : 2084;
+    const now = new Date();
+    const daysUntil = Math.max(0, Math.ceil((nd - now) / 86400000));
+    return { id: lastId + 1, date: dateStr, weekday, formatted: `${formatDate(dateStr)}（${weekday}）`, daysUntil };
+  }
+
+  function getAllDrawData() {
+    const builtin = typeof LOTO6_BUILTIN_DATA !== 'undefined' ? LOTO6_BUILTIN_DATA : [];
+    const user = Storage.getUserDraws();
+    const merged = [...builtin];
+    const ids = new Set(builtin.map(d => d.id));
+    for (const ud of user) {
+      if (!ids.has(ud.id)) { merged.push(ud); ids.add(ud.id); }
+    }
+    merged.sort((a, b) => b.id - a.id);
+    return merged;
+  }
+
+  function getBallColorClass(num) {
+    if (num <= 9) return 'ball-1-9';
+    if (num <= 19) return 'ball-10-19';
+    if (num <= 29) return 'ball-20-29';
+    if (num <= 39) return 'ball-30-39';
+    return 'ball-40-43';
+  }
+
+  function renderBall(num, options = {}) {
+    const cls = ['ball', getBallColorClass(num)];
+    if (options.animate) cls.push('ball-animate');
+    if (options.matched) cls.push('ball-matched');
+    if (options.bonus) cls.push('ball-bonus');
+    if (options.clickable) cls.push('ball-clickable');
+    const delay = options.delay || 0;
+    const style = delay ? `animation-delay: ${delay}ms` : '';
+    const numStr = String(num).padStart(2, '0');
+    const dataAttr = options.clickable ? `data-ball-num="${num}" onclick="App.showBallDetail(${num})"` : '';
+    return `<span class="${cls.join(' ')}" ${style ? `style="${style}"` : ''} ${dataAttr}>${numStr}</span>`;
+  }
+
+  function renderBalls(nums, options = {}) {
+    return nums.map((n, i) => renderBall(n, {
+      ...options,
+      delay: options.animate ? i * 300 : 0,
+      matched: options.matchedNums ? options.matchedNums.includes(n) : (options.matched || false),
+    })).join('');
+  }
+
+  function calcSum(nums) { return nums.reduce((a, b) => a + b, 0); }
+
+  function calcOddEvenStr(nums) {
+    const odd = nums.filter(n => n % 2 === 1).length;
+    return `${odd}:${6 - odd}`;
+  }
+
+  function calcOddEvenObj(nums) {
+    const odd = nums.filter(n => n % 2 === 1).length;
+    return { odd, even: nums.length - odd };
+  }
+
+  function prizeTier(matchCount, bonusMatch) {
+    if (matchCount === 6) return '1等';
+    if (matchCount === 5 && bonusMatch) return '2等';
+    if (matchCount === 5) return '3等';
+    if (matchCount === 4) return '4等';
+    if (matchCount === 3) return '5等';
+    return 'ハズレ';
+  }
+
+  function prizeClass(tier) {
+    const map = {'1等':'prize-1','2等':'prize-2','3等':'prize-3','4等':'prize-4','5等':'prize-5'};
+    return map[tier] || 'prize-miss';
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => showToast('コピーしました')).catch(() => {
+        fallbackCopy(text);
+      });
+    } else {
+      fallbackCopy(text);
+    }
+  }
+
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('コピーしました');
+  }
+
+  function showToast(msg, duration) {
+    duration = duration || 2000;
+    let toast = document.getElementById('toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => toast.classList.remove('show'), duration);
+  }
+
+  function hapticFeedback() {
+    if (navigator.vibrate) navigator.vibrate([30]);
+  }
+
+  function renderMarkSheet(nums) {
+    const selected = new Set(nums);
+    let html = '<div class="marksheet">';
+    for (let n = 1; n <= 43; n++) {
+      const cls = selected.has(n) ? 'ms-num ms-marked' : 'ms-num';
+      html += `<div class="${cls}">${String(n).padStart(2, '0')}</div>`;
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderCopyableTextarea(text, id) {
+    return `<textarea readonly class="copyable-textarea" id="${id || ''}" onfocus="this.select()" onclick="this.select()">${text}</textarea>`;
+  }
+
+  function debounce(fn, ms) {
+    let timer;
+    return function() {
+      clearTimeout(timer);
+      const args = arguments;
+      const ctx = this;
+      timer = setTimeout(() => fn.apply(ctx, args), ms);
+    };
+  }
+
+  return {
+    getWeekday, formatDate, formatDateTime, toDateStr,
+    nextDrawDate, nextDrawInfo, getAllDrawData,
+    getBallColorClass, renderBall, renderBalls,
+    calcSum, calcOddEvenStr, calcOddEvenObj, prizeTier, prizeClass,
+    copyToClipboard, showToast, hapticFeedback,
+    renderMarkSheet, renderCopyableTextarea, debounce
+  };
+})();
+
+
+// ===== analyzer.js =====
+/* ===== Statistical Analysis Engine (v3 - 12 Types) ===== */
+
+const Analyzer = (() => {
+  'use strict';
+
+  function _slice(data, lastN) {
+    return lastN ? data.slice(0, lastN) : data;
+  }
+
+  // 1. Frequency (W1)
+  function calcFrequency(data, lastN) {
+    const d = _slice(data, lastN);
+    const freq = {};
+    for (let n = 1; n <= 43; n++) freq[n] = 0;
+    d.forEach(draw => draw.nums.forEach(n => freq[n]++));
+    const result = {};
+    for (let n = 1; n <= 43; n++) {
+      result[n] = { count: freq[n], rate: d.length > 0 ? freq[n] / d.length : 0 };
+    }
+    return result;
+  }
+
+  // 2. Dormancy (W2)
+  function calcDormancy(data) {
+    const dormancy = {};
+    for (let n = 1; n <= 43; n++) dormancy[n] = data.length;
+    for (let i = 0; i < data.length; i++) {
+      data[i].nums.forEach(n => {
+        if (dormancy[n] === data.length) dormancy[n] = i;
+      });
+    }
+    return dormancy;
+  }
+
+  // 3. Odd/Even (W4)
+  function calcOddEven(data, lastN) {
+    const d = _slice(data, lastN);
+    const patterns = {};
+    d.forEach(draw => {
+      const odd = draw.nums.filter(n => n % 2 === 1).length;
+      const key = `${odd}:${6 - odd}`;
+      patterns[key] = (patterns[key] || 0) + 1;
+    });
+    return patterns;
+  }
+
+  // 4. Range distribution (W7)
+  function calcRangeDistribution(data, lastN) {
+    const d = _slice(data, lastN);
+    const ranges = { '1-9': 0, '10-19': 0, '20-29': 0, '30-39': 0, '40-43': 0 };
+    d.forEach(draw => draw.nums.forEach(n => {
+      if (n <= 9) ranges['1-9']++;
+      else if (n <= 19) ranges['10-19']++;
+      else if (n <= 29) ranges['20-29']++;
+      else if (n <= 39) ranges['30-39']++;
+      else ranges['40-43']++;
+    }));
+    return ranges;
+  }
+
+  // 5. Sum statistics (W5)
+  function calcSumStats(data, lastN) {
+    const d = _slice(data, lastN);
+    if (d.length === 0) return { mean: 0, median: 0, stdDev: 0, histogram: {} };
+    const sums = d.map(draw => draw.nums.reduce((a, b) => a + b, 0));
+    sums.sort((a, b) => a - b);
+    const mean = Math.round(sums.reduce((a, b) => a + b, 0) / sums.length);
+    const median = sums[Math.floor(sums.length / 2)];
+    const variance = sums.reduce((s, v) => s + (v - mean) ** 2, 0) / sums.length;
+    const stdDev = Math.round(Math.sqrt(variance));
+    const histogram = {};
+    sums.forEach(s => {
+      const bin = Math.floor(s / 20) * 20;
+      const label = `${bin}-${bin + 19}`;
+      histogram[label] = (histogram[label] || 0) + 1;
+    });
+    return { mean, median, stdDev, histogram, min: sums[0], max: sums[sums.length - 1] };
+  }
+
+  // 6. Consecutive numbers (Improvement 2)
+  function calcConsecutive(data, lastN) {
+    const d = _slice(data, lastN);
+    let withConsec = 0;
+    const pairCounts = {};
+    d.forEach(draw => {
+      let hasConsec = false;
+      const sorted = [...draw.nums].sort((a, b) => a - b);
+      for (let i = 0; i < sorted.length - 1; i++) {
+        if (sorted[i + 1] - sorted[i] === 1) {
+          hasConsec = true;
+          const pair = `${sorted[i]}-${sorted[i + 1]}`;
+          pairCounts[pair] = (pairCounts[pair] || 0) + 1;
+        }
+      }
+      if (hasConsec) withConsec++;
+    });
+    const rate = d.length > 0 ? withConsec / d.length : 0;
+    const topPairs = Object.entries(pairCounts)
+      .sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([pair, count]) => ({ pair, count }));
+    return { rate, withConsec, total: d.length, topPairs };
+  }
+
+  // 7. Last digit analysis (Improvement 3)
+  function calcLastDigit(data, lastN) {
+    const d = _slice(data, lastN);
+    const digits = {};
+    for (let i = 0; i <= 9; i++) digits[i] = 0;
+    d.forEach(draw => draw.nums.forEach(n => digits[n % 10]++));
+    const total = d.length * 6;
+    const result = {};
+    for (let i = 0; i <= 9; i++) {
+      result[i] = { count: digits[i], rate: total > 0 ? digits[i] / total : 0 };
+    }
+    return result;
+  }
+
+  // 8. Interval distribution / Cycle (Improvement 4, W11)
+  function calcIntervalDistribution(data) {
+    const dormancy = calcDormancy(data);
+    const result = {};
+    for (let n = 1; n <= 43; n++) {
+      const indices = [];
+      for (let i = 0; i < data.length; i++) {
+        if (data[i].nums.includes(n)) indices.push(i);
+      }
+      const intervals = [];
+      for (let i = 0; i < indices.length - 1; i++) {
+        intervals.push(indices[i + 1] - indices[i]);
+      }
+      if (intervals.length >= 2) {
+        const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+        const lambda = 1 / avg;
+        const d = dormancy[n];
+        const probNext = 1 - Math.exp(-lambda * (d + 1));
+        result[n] = { avgInterval: avg, intervals, dormancy: d, probNext };
+      } else {
+        result[n] = { avgInterval: null, intervals, dormancy: dormancy[n], probNext: 6 / 43 };
+      }
+    }
+    return result;
+  }
+
+  // 9. Hot/Cold cycle (Improvement 5)
+  function calcHotColdCycle(data, windowSize) {
+    windowSize = windowSize || 10;
+    const expected = 6 / 43;
+    const result = {};
+    for (let n = 1; n <= 43; n++) {
+      const recentSlice = data.slice(0, windowSize);
+      const recentCount = recentSlice.filter(d => d.nums.includes(n)).length;
+      const recentRate = windowSize > 0 ? recentCount / windowSize : 0;
+      const prevSlice = data.slice(windowSize, windowSize * 2);
+      const prevCount = prevSlice.filter(d => d.nums.includes(n)).length;
+      const prevRate = prevSlice.length > 0 ? prevCount / prevSlice.length : 0;
+      const trend = recentRate - prevRate;
+      result[n] = {
+        state: recentRate > expected * 1.3 ? 'hot' : recentRate < expected * 0.7 ? 'cold' : 'normal',
+        recentRate, trend,
+      };
+    }
+    return result;
+  }
+
+  // 10. Pair correlation (W8)
+  function calcCorrelation(data, topN) {
+    topN = topN || 20;
+    const pairs = {};
+    data.forEach(draw => {
+      for (let i = 0; i < draw.nums.length; i++) {
+        for (let j = i + 1; j < draw.nums.length; j++) {
+          const key = `${draw.nums[i]}-${draw.nums[j]}`;
+          pairs[key] = (pairs[key] || 0) + 1;
+        }
+      }
+    });
+    return Object.entries(pairs)
+      .sort((a, b) => b[1] - a[1]).slice(0, topN)
+      .map(([pair, count]) => ({ pair, count }));
+  }
+
+  // 11. Triplet correlation (Improvement 6, W12)
+  function calcTriplets(data, topN) {
+    topN = topN || 10;
+    const trips = {};
+    data.forEach(draw => {
+      for (let i = 0; i < draw.nums.length; i++) {
+        for (let j = i + 1; j < draw.nums.length; j++) {
+          for (let k = j + 1; k < draw.nums.length; k++) {
+            const key = `${draw.nums[i]}-${draw.nums[j]}-${draw.nums[k]}`;
+            trips[key] = (trips[key] || 0) + 1;
+          }
+        }
+      }
+    });
+    return Object.entries(trips)
+      .sort((a, b) => b[1] - a[1]).slice(0, topN)
+      .map(([triplet, count]) => ({ triplet, count }));
+  }
+
+  // 12. Weekday trend (W10)
+  function calcWeekdayTrend(data) {
+    const monday = data.filter(d => new Date(d.date + 'T00:00:00').getDay() === 1);
+    const thursday = data.filter(d => new Date(d.date + 'T00:00:00').getDay() === 4);
+    function freqFor(subset) {
+      const freq = {};
+      for (let n = 1; n <= 43; n++) freq[n] = 0;
+      subset.forEach(d => d.nums.forEach(n => freq[n]++));
+      const result = {};
+      for (let n = 1; n <= 43; n++) {
+        result[n] = { count: freq[n], rate: subset.length > 0 ? freq[n] / subset.length : 0 };
+      }
+      return result;
+    }
+    return {
+      monday: { count: monday.length, frequency: freqFor(monday) },
+      thursday: { count: thursday.length, frequency: freqFor(thursday) },
+    };
+  }
+
+  // Trend / Moving avg
+  function calcMovingAvg(data, windowSize) {
+    windowSize = windowSize || 20;
+    const scores = {};
+    for (let n = 1; n <= 43; n++) {
+      const recent = data.slice(0, windowSize);
+      const older = data.slice(windowSize, windowSize * 2);
+      const recentCount = recent.filter(d => d.nums.includes(n)).length;
+      const olderCount = older.filter(d => d.nums.includes(n)).length;
+      const recentRate = windowSize > 0 ? recentCount / windowSize : 0;
+      const olderRate = older.length > 0 ? olderCount / older.length : 0;
+      scores[n] = { recentRate, olderRate, slope: recentRate - olderRate };
+    }
+    return scores;
+  }
+
+  // Spread score helper
+  function calcSpreadScore(nums) {
+    if (nums.length < 2) return 0;
+    const sorted = [...nums].sort((a, b) => a - b);
+    const gaps = [];
+    for (let i = 1; i < sorted.length; i++) gaps.push(sorted[i] - sorted[i - 1]);
+    const idealGap = 42 / 5;
+    const avgGap = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+    return Math.max(0, 1 - Math.abs(avgGap - idealGap) / idealGap);
+  }
+
+  // Full analysis
+  function fullAnalysis(data, lastN) {
+    return {
+      frequency: calcFrequency(data, lastN),
+      dormancy: calcDormancy(data),
+      oddEven: calcOddEven(data, lastN),
+      rangeDist: calcRangeDistribution(data, lastN),
+      sumStats: calcSumStats(data, lastN),
+      consecutive: calcConsecutive(data, lastN),
+      lastDigit: calcLastDigit(data, lastN),
+      intervalDist: calcIntervalDistribution(data),
+      hotCold: calcHotColdCycle(data),
+      correlation: calcCorrelation(data),
+      triplets: calcTriplets(data),
+      weekdayTrend: calcWeekdayTrend(data),
+      movingAvg: calcMovingAvg(data),
+      sampleSize: _slice(data, lastN).length,
+    };
+  }
+
+  return {
+    calcFrequency, calcDormancy, calcOddEven, calcRangeDistribution,
+    calcSumStats, calcConsecutive, calcLastDigit, calcIntervalDistribution,
+    calcHotColdCycle, calcCorrelation, calcTriplets, calcWeekdayTrend,
+    calcMovingAvg, calcSpreadScore, fullAnalysis,
+  };
+})();
+
+
+// ===== ai-engine.js =====
+/* ===== AI Algorithm Engine (v3) ===== */
+/* MC, GA, SA, Entropy, Correlation, Trend, Overdue */
+
+const AIEngine = (() => {
+  'use strict';
+
+  // ---- Fitness function (12 components) ----
+  function fitness(nums, analysis, weights) {
+    const w = weights;
+    const sorted = [...nums].sort((a, b) => a - b);
+    let score = 0;
+
+    // W1: Frequency score
+    const freqScores = sorted.map(n => analysis.frequency[n] ? analysis.frequency[n].rate : 0);
+    score += w.W1 * (freqScores.reduce((a, b) => a + b, 0) / 6) * 10;
+
+    // W2: Dormancy score (higher dormancy = higher score for overdue)
+    const maxDorm = Math.max(...Object.values(analysis.dormancy), 1);
+    const dormScores = sorted.map(n => (analysis.dormancy[n] || 0) / maxDorm);
+    score += w.W2 * (dormScores.reduce((a, b) => a + b, 0) / 6);
+
+    // W3: Entropy score (information diversity)
+    const digitSet = new Set(sorted.map(n => n % 10));
+    const entropyScore = digitSet.size / Math.min(6, 10);
+    score += w.W3 * entropyScore;
+
+    // W4: Odd/Even balance (ideal ~3:3)
+    const odd = sorted.filter(n => n % 2 === 1).length;
+    const oeScore = 1 - Math.abs(odd - 3) / 3;
+    score += w.W4 * oeScore;
+
+    // W5: Sum balance (ideal around 132)
+    const sum = sorted.reduce((a, b) => a + b, 0);
+    const idealSum = analysis.sumStats ? analysis.sumStats.mean || 132 : 132;
+    const stdDev = analysis.sumStats ? (analysis.sumStats.stdDev || 30) : 30;
+    const sumScore = Math.exp(-(sum - idealSum) ** 2 / (2 * stdDev ** 2));
+    score += w.W5 * sumScore;
+
+    // W6: Spread (even distribution)
+    score += w.W6 * Analyzer.calcSpreadScore(sorted);
+
+    // W7: Range balance
+    const rangeCounts = [0, 0, 0, 0, 0]; // 1-9, 10-19, 20-29, 30-39, 40-43
+    sorted.forEach(n => {
+      if (n <= 9) rangeCounts[0]++;
+      else if (n <= 19) rangeCounts[1]++;
+      else if (n <= 29) rangeCounts[2]++;
+      else if (n <= 39) rangeCounts[3]++;
+      else rangeCounts[4]++;
+    });
+    const rangeVariance = rangeCounts.reduce((s, c) => s + (c - 1.2) ** 2, 0) / 5;
+    score += w.W7 * Math.max(0, 1 - rangeVariance / 2);
+
+    // W8: Pair correlation
+    if (analysis.correlation) {
+      const topPairs = new Set(analysis.correlation.slice(0, 30).map(p => p.pair));
+      let pairHits = 0;
+      for (let i = 0; i < sorted.length; i++) {
+        for (let j = i + 1; j < sorted.length; j++) {
+          if (topPairs.has(`${sorted[i]}-${sorted[j]}`)) pairHits++;
+        }
+      }
+      score += w.W8 * Math.min(1, pairHits / 3);
+    }
+
+    // W9: Trend score
+    if (analysis.movingAvg) {
+      const trendScores = sorted.map(n => {
+        const ma = analysis.movingAvg[n];
+        return ma ? Math.max(0, ma.slope + 0.5) : 0.5;
+      });
+      score += w.W9 * (trendScores.reduce((a, b) => a + b, 0) / 6);
+    }
+
+    // W10: Weekday tendency
+    if (analysis.weekdayTrend) {
+      const now = new Date();
+      const nextDraw = Utils.nextDrawDate();
+      const isMonday = nextDraw.getDay() === 1;
+      const wdData = isMonday ? analysis.weekdayTrend.monday : analysis.weekdayTrend.thursday;
+      if (wdData && wdData.frequency) {
+        const wdScores = sorted.map(n => wdData.frequency[n] ? wdData.frequency[n].rate : 0);
+        score += w.W10 * (wdScores.reduce((a, b) => a + b, 0) / 6) * 7;
+      }
+    }
+
+    // W11: Cycle score (Poisson)
+    if (analysis.intervalDist) {
+      const cycleScores = sorted.map(n => {
+        const iv = analysis.intervalDist[n];
+        return iv ? iv.probNext : 6 / 43;
+      });
+      score += w.W11 * (cycleScores.reduce((a, b) => a + b, 0) / 6);
+    }
+
+    // W12: Triplet score
+    if (analysis.triplets) {
+      const topTrips = new Set(analysis.triplets.slice(0, 20).map(t => t.triplet));
+      let tripHits = 0;
+      for (let i = 0; i < sorted.length; i++) {
+        for (let j = i + 1; j < sorted.length; j++) {
+          for (let k = j + 1; k < sorted.length; k++) {
+            if (topTrips.has(`${sorted[i]}-${sorted[j]}-${sorted[k]}`)) tripHits++;
+          }
+        }
+      }
+      score += w.W12 * Math.min(1, tripHits / 2);
+    }
+
+    return score;
+  }
+
+  // ---- Confidence score (Improvement 8) ----
+  function calcConfidence(nums, analysis, weights) {
+    const components = _getComponentScores(nums, analysis, weights);
+    const aboveMedian = components.filter(c => c.score >= 0.5).length;
+    return Math.round((aboveMedian / components.length) * 100);
+  }
+
+  function _getComponentScores(nums, analysis, weights) {
+    const sorted = [...nums].sort((a, b) => a - b);
+    const scores = [];
+
+    // Frequency component
+    const freqScores = sorted.map(n => analysis.frequency[n] ? analysis.frequency[n].rate : 0);
+    scores.push({ name: 'freq', score: Math.min(1, (freqScores.reduce((a, b) => a + b, 0) / 6) * 7) });
+
+    // Dormancy component
+    const maxDorm = Math.max(...Object.values(analysis.dormancy), 1);
+    const dormScores = sorted.map(n => (analysis.dormancy[n] || 0) / maxDorm);
+    scores.push({ name: 'dormancy', score: dormScores.reduce((a, b) => a + b, 0) / 6 });
+
+    // Entropy
+    const digitSet = new Set(sorted.map(n => n % 10));
+    scores.push({ name: 'entropy', score: digitSet.size / Math.min(6, 10) });
+
+    // Odd/Even
+    const odd = sorted.filter(n => n % 2 === 1).length;
+    scores.push({ name: 'oddEven', score: 1 - Math.abs(odd - 3) / 3 });
+
+    // Sum
+    const sum = sorted.reduce((a, b) => a + b, 0);
+    const idealSum = analysis.sumStats ? analysis.sumStats.mean || 132 : 132;
+    scores.push({ name: 'sum', score: Math.exp(-(sum - idealSum) ** 2 / (2 * 900)) });
+
+    // Spread
+    scores.push({ name: 'spread', score: Analyzer.calcSpreadScore(sorted) });
+
+    // Range balance
+    const rc = [0, 0, 0, 0, 0];
+    sorted.forEach(n => { if (n <= 9) rc[0]++; else if (n <= 19) rc[1]++; else if (n <= 29) rc[2]++; else if (n <= 39) rc[3]++; else rc[4]++; });
+    scores.push({ name: 'range', score: Math.max(0, 1 - rc.reduce((s, c) => s + (c - 1.2) ** 2, 0) / 10) });
+
+    // Pair
+    if (analysis.correlation) {
+      const topP = new Set(analysis.correlation.slice(0, 30).map(p => p.pair));
+      let ph = 0;
+      for (let i = 0; i < sorted.length; i++) for (let j = i + 1; j < sorted.length; j++) if (topP.has(`${sorted[i]}-${sorted[j]}`)) ph++;
+      scores.push({ name: 'pair', score: Math.min(1, ph / 3) });
+    } else { scores.push({ name: 'pair', score: 0 }); }
+
+    // Trend
+    if (analysis.movingAvg) {
+      const ts = sorted.map(n => { const m = analysis.movingAvg[n]; return m ? Math.max(0, Math.min(1, m.slope + 0.5)) : 0.5; });
+      scores.push({ name: 'trend', score: ts.reduce((a, b) => a + b, 0) / 6 });
+    } else { scores.push({ name: 'trend', score: 0.5 }); }
+
+    // Weekday
+    scores.push({ name: 'weekday', score: 0.5 });
+
+    // Cycle
+    if (analysis.intervalDist) {
+      const cs = sorted.map(n => { const iv = analysis.intervalDist[n]; return iv ? iv.probNext : 6 / 43; });
+      scores.push({ name: 'cycle', score: cs.reduce((a, b) => a + b, 0) / 6 });
+    } else { scores.push({ name: 'cycle', score: 0.14 }); }
+
+    // Triplet
+    scores.push({ name: 'triplet', score: 0 });
+
+    return scores;
+  }
+
+  // ---- Random set generator ----
+  function _randomSet() {
+    const nums = [];
+    while (nums.length < 6) {
+      const n = Math.floor(Math.random() * 43) + 1;
+      if (!nums.includes(n)) nums.push(n);
+    }
+    return nums.sort((a, b) => a - b);
+  }
+
+  // ---- Weighted random set ----
+  function _weightedRandomSet(scoreMap) {
+    const entries = Object.entries(scoreMap).map(([n, s]) => [parseInt(n), Math.max(s, 0.001)]);
+    const totalWeight = entries.reduce((s, [, w]) => s + w, 0);
+    const nums = [];
+    const available = [...entries];
+    while (nums.length < 6 && available.length > 0) {
+      let r = Math.random() * available.reduce((s, [, w]) => s + w, 0);
+      for (let i = 0; i < available.length; i++) {
+        r -= available[i][1];
+        if (r <= 0) {
+          nums.push(available[i][0]);
+          available.splice(i, 1);
+          break;
+        }
+      }
+    }
+    return nums.sort((a, b) => a - b);
+  }
+
+  // ---- 1. Monte Carlo Simulation ----
+  function monteCarlo(analysis, weights, iterations) {
+    iterations = iterations || 50000;
+    const scoreMap = {};
+    for (let n = 1; n <= 43; n++) {
+      scoreMap[n] = (analysis.frequency[n] ? analysis.frequency[n].rate : 0) * 5 +
+                    (analysis.intervalDist && analysis.intervalDist[n] ? analysis.intervalDist[n].probNext : 0.14) +
+                    (analysis.movingAvg && analysis.movingAvg[n] ? Math.max(0, analysis.movingAvg[n].slope + 0.5) : 0.5);
+    }
+
+    let bestSet = null;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < iterations; i++) {
+      const set = _weightedRandomSet(scoreMap);
+      const score = fitness(set, analysis, weights);
+      if (score > bestScore) {
+        bestScore = score;
+        bestSet = set;
+      }
+    }
+    return { nums: bestSet, fitness: bestScore };
+  }
+
+  // ---- 2. Genetic Algorithm ----
+  function geneticAlgorithm(analysis, weights, options) {
+    const popSize = (options && options.popSize) || 150;
+    const generations = (options && options.generations) || 100;
+    const mutationRate = 0.15;
+    const eliteCount = Math.max(2, Math.floor(popSize * 0.1));
+
+    // Build score map for initial population
+    const scoreMap = {};
+    for (let n = 1; n <= 43; n++) {
+      scoreMap[n] = (analysis.frequency[n] ? analysis.frequency[n].rate : 0) * 3 + 0.5;
+    }
+
+    // Initialize population
+    let population = [];
+    for (let i = 0; i < popSize; i++) {
+      population.push(_weightedRandomSet(scoreMap));
+    }
+
+    for (let gen = 0; gen < generations; gen++) {
+      // Evaluate fitness
+      const scored = population.map(p => ({ nums: p, score: fitness(p, analysis, weights) }));
+      scored.sort((a, b) => b.score - a.score);
+
+      const newPop = [];
+      // Elitism
+      for (let i = 0; i < eliteCount; i++) newPop.push(scored[i].nums);
+
+      // Fill rest with crossover + mutation
+      while (newPop.length < popSize) {
+        // Tournament selection
+        const parent1 = _tournament(scored, 5);
+        const parent2 = _tournament(scored, 5);
+        let child = _crossover(parent1, parent2);
+        // Adaptive mutation (higher in later generations)
+        const adaptiveMR = mutationRate * (1 + gen / generations);
+        if (Math.random() < adaptiveMR) child = _mutate(child);
+        newPop.push(child);
+      }
+
+      // Diversity injection every 20 generations
+      if (gen > 0 && gen % 20 === 0) {
+        for (let i = popSize - 5; i < popSize; i++) {
+          newPop[i] = _weightedRandomSet(scoreMap);
+        }
+      }
+
+      population = newPop;
+    }
+
+    // Return best
+    const final = population.map(p => ({ nums: p, score: fitness(p, analysis, weights) }));
+    final.sort((a, b) => b.score - a.score);
+    return { nums: final[0].nums, fitness: final[0].score };
+  }
+
+  function _tournament(scored, k) {
+    let best = null;
+    for (let i = 0; i < k; i++) {
+      const idx = Math.floor(Math.random() * scored.length);
+      if (!best || scored[idx].score > best.score) best = scored[idx];
+    }
+    return best.nums;
+  }
+
+  function _crossover(p1, p2) {
+    const pool = new Set([...p1, ...p2]);
+    const arr = Array.from(pool);
+    // Shuffle and pick 6
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr.slice(0, 6).sort((a, b) => a - b);
+  }
+
+  function _mutate(nums) {
+    const result = [...nums];
+    const idx = Math.floor(Math.random() * 6);
+    let newNum;
+    do { newNum = Math.floor(Math.random() * 43) + 1; } while (result.includes(newNum));
+    result[idx] = newNum;
+    return result.sort((a, b) => a - b);
+  }
+
+  // ---- 3. Simulated Annealing (Improvement 7) ----
+  function simulatedAnnealing(analysis, weights, options) {
+    const initTemp = (options && options.initTemp) || 1000;
+    const coolRate = (options && options.coolRate) || 0.995;
+    const trialsPerTemp = (options && options.trials) || 100;
+
+    let current = _randomSet();
+    let currentScore = fitness(current, analysis, weights);
+    let best = current;
+    let bestScore = currentScore;
+    let temp = initTemp;
+
+    while (temp > 0.1) {
+      for (let i = 0; i < trialsPerTemp; i++) {
+        const neighbor = _mutate([...current]);
+        const neighborScore = fitness(neighbor, analysis, weights);
+        const delta = neighborScore - currentScore;
+        if (delta > 0 || Math.random() < Math.exp(delta / temp)) {
+          current = neighbor;
+          currentScore = neighborScore;
+          if (currentScore > bestScore) {
+            best = current;
+            bestScore = currentScore;
+          }
+        }
+      }
+      temp *= coolRate;
+    }
+    return { nums: best, fitness: bestScore };
+  }
+
+  // ---- 4. Entropy Optimization ----
+  function entropyOptimization(analysis, weights, iterations) {
+    iterations = iterations || 30000;
+    let bestSet = null;
+    let bestScore = -Infinity;
+
+    for (let i = 0; i < iterations; i++) {
+      // Build set emphasizing entropy (digit diversity) + dormancy + range
+      const nums = [];
+      const usedDigits = new Set();
+      const usedRanges = new Set();
+
+      while (nums.length < 6) {
+        let candidates = [];
+        for (let n = 1; n <= 43; n++) {
+          if (nums.includes(n)) continue;
+          let bonus = 0;
+          const digit = n % 10;
+          if (!usedDigits.has(digit)) bonus += 2;
+          const range = Math.floor((n - 1) / 10);
+          if (!usedRanges.has(range)) bonus += 1;
+          const dormScore = (analysis.dormancy[n] || 0) / 50;
+          candidates.push({ n, weight: 1 + bonus + dormScore + Math.random() * 0.5 });
+        }
+        candidates.sort((a, b) => b.weight - a.weight);
+        const chosen = candidates[0].n;
+        nums.push(chosen);
+        usedDigits.add(chosen % 10);
+        usedRanges.add(Math.floor((chosen - 1) / 10));
+      }
+
+      nums.sort((a, b) => a - b);
+      const score = fitness(nums, analysis, weights);
+      if (score > bestScore) {
+        bestScore = score;
+        bestSet = nums;
+      }
+    }
+    return { nums: bestSet, fitness: bestScore };
+  }
+
+  // ---- 5. Correlation-based selection ----
+  function correlationBased(analysis, weights) {
+    const topPairs = analysis.correlation.slice(0, 15);
+    const topTrips = analysis.triplets ? analysis.triplets.slice(0, 5) : [];
+
+    let bestSet = null;
+    let bestScore = -Infinity;
+
+    for (let trial = 0; trial < 5000; trial++) {
+      const nums = new Set();
+
+      // Start with a high-correlation pair or triplet
+      if (topTrips.length > 0 && Math.random() < 0.4) {
+        const trip = topTrips[Math.floor(Math.random() * topTrips.length)];
+        trip.triplet.split('-').map(Number).forEach(n => nums.add(n));
+      } else if (topPairs.length > 0) {
+        const pair = topPairs[Math.floor(Math.random() * topPairs.length)];
+        pair.pair.split('-').map(Number).forEach(n => nums.add(n));
+      }
+
+      // Fill remaining with weighted random
+      while (nums.size < 6) {
+        const n = Math.floor(Math.random() * 43) + 1;
+        nums.add(n);
+      }
+
+      const sorted = Array.from(nums).sort((a, b) => a - b).slice(0, 6);
+      const score = fitness(sorted, analysis, weights);
+      if (score > bestScore) {
+        bestScore = score;
+        bestSet = sorted;
+      }
+    }
+    return { nums: bestSet, fitness: bestScore };
+  }
+
+  // ---- 6. Trend-following selection ----
+  function trendFollowing(analysis, weights) {
+    const hotCold = analysis.hotCold;
+    const movingAvg = analysis.movingAvg;
+    const scoreMap = {};
+
+    for (let n = 1; n <= 43; n++) {
+      let s = 1;
+      if (hotCold && hotCold[n]) {
+        if (hotCold[n].state === 'hot') s += 3;
+        s += hotCold[n].trend * 5;
+      }
+      if (movingAvg && movingAvg[n]) {
+        s += Math.max(0, movingAvg[n].slope * 10);
+      }
+      scoreMap[n] = Math.max(s, 0.01);
+    }
+
+    let bestSet = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < 10000; i++) {
+      const set = _weightedRandomSet(scoreMap);
+      const score = fitness(set, analysis, weights);
+      if (score > bestScore) {
+        bestScore = score;
+        bestSet = set;
+      }
+    }
+    return { nums: bestSet, fitness: bestScore };
+  }
+
+  // ---- 7. Overdue regression selection ----
+  function overdueRegression(analysis, weights) {
+    const intervalDist = analysis.intervalDist;
+    const dormancy = analysis.dormancy;
+    const scoreMap = {};
+
+    for (let n = 1; n <= 43; n++) {
+      let s = 1;
+      if (intervalDist && intervalDist[n]) {
+        s += intervalDist[n].probNext * 5;
+      }
+      s += (dormancy[n] || 0) / 20;
+      scoreMap[n] = Math.max(s, 0.01);
+    }
+
+    let bestSet = null;
+    let bestScore = -Infinity;
+    for (let i = 0; i < 10000; i++) {
+      const set = _weightedRandomSet(scoreMap);
+      const score = fitness(set, analysis, weights);
+      if (score > bestScore) {
+        bestScore = score;
+        bestSet = set;
+      }
+    }
+    return { nums: bestSet, fitness: bestScore };
+  }
+
+  // ---- Generate all candidates ----
+  function generateCandidates(data, advancedMode) {
+    const weights = Storage.getWeights();
+    const analysis = Analyzer.fullAnalysis(data);
+    const candidates = [];
+
+    const mcIter = advancedMode ? 200000 : 50000;
+    const gaOpts = advancedMode ? { popSize: 300, generations: 200 } : { popSize: 150, generations: 100 };
+    const entIter = advancedMode ? 100000 : 30000;
+
+    // Run all algorithms
+    candidates.push({ ...monteCarlo(analysis, weights, mcIter), algo: 'MC' });
+    candidates.push({ ...geneticAlgorithm(analysis, weights, gaOpts), algo: 'GA' });
+    candidates.push({ ...simulatedAnnealing(analysis, weights), algo: 'SA' });
+    candidates.push({ ...entropyOptimization(analysis, weights, entIter), algo: 'Entropy' });
+    candidates.push({ ...correlationBased(analysis, weights), algo: 'Corr' });
+    candidates.push({ ...trendFollowing(analysis, weights), algo: 'Trend' });
+    candidates.push({ ...overdueRegression(analysis, weights), algo: 'Overdue' });
+
+    // Run additional rounds for more candidates
+    const extraRounds = advancedMode ? 8 : 4;
+    for (let r = 0; r < extraRounds; r++) {
+      candidates.push({ ...monteCarlo(analysis, weights, mcIter / 2), algo: 'MC' });
+      candidates.push({ ...geneticAlgorithm(analysis, weights, { popSize: gaOpts.popSize / 2, generations: gaOpts.generations / 2 }), algo: 'GA' });
+      candidates.push({ ...simulatedAnnealing(analysis, weights, { initTemp: 500, coolRate: 0.99, trials: 50 }), algo: 'SA' });
+      candidates.push({ ...entropyOptimization(analysis, weights, entIter / 2), algo: 'Entropy' });
+      candidates.push({ ...trendFollowing(analysis, weights), algo: 'Trend' });
+      candidates.push({ ...overdueRegression(analysis, weights), algo: 'Overdue' });
+    }
+
+    // Add confidence score
+    candidates.forEach(c => {
+      c.confidence = calcConfidence(c.nums, analysis, weights);
+    });
+
+    return { candidates, analysis, weights };
+  }
+
+  return {
+    fitness, calcConfidence, generateCandidates,
+    monteCarlo, geneticAlgorithm, simulatedAnnealing,
+    entropyOptimization, correlationBased, trendFollowing, overdueRegression,
+  };
+})();
+
+
+// ===== predictor.js =====
+/* ===== Prediction Engine (v3 - 5 Strategies + Portfolio) ===== */
+
+const Predictor = (() => {
+  'use strict';
+
+  const STRATEGY_NAMES = {
+    optimal: 'AI最適解',
+    trend: 'トレンド重視',
+    overdue: '出遅れ回帰',
+    correlation: '高相関ネットワーク',
+    balanced: '分散バランス',
+  };
+
+  const STRATEGY_KEYS = ['optimal', 'trend', 'overdue', 'correlation', 'balanced'];
+
+  // Calculate overlap between two number sets
+  function _overlap(a, b) {
+    return a.filter(n => b.includes(n)).length;
+  }
+
+  // Portfolio optimization: select 5 sets minimizing overlap
+  function _portfolioSelect(candidates, analysis, weights) {
+    if (candidates.length < 5) return candidates.slice(0, 5);
+
+    // Sort by fitness descending
+    candidates.sort((a, b) => b.fitness - a.fitness);
+
+    // Assign strategy preferences
+    const strategyScorers = {
+      optimal: (c) => c.fitness,
+      trend: (c) => {
+        let s = c.fitness;
+        c.nums.forEach(n => {
+          if (analysis.hotCold && analysis.hotCold[n] && analysis.hotCold[n].state === 'hot') s += 0.1;
+          if (analysis.movingAvg && analysis.movingAvg[n]) s += analysis.movingAvg[n].slope;
+        });
+        return s;
+      },
+      overdue: (c) => {
+        let s = c.fitness;
+        c.nums.forEach(n => {
+          if (analysis.intervalDist && analysis.intervalDist[n]) s += analysis.intervalDist[n].probNext * 0.5;
+          s += (analysis.dormancy[n] || 0) / 100;
+        });
+        return s;
+      },
+      correlation: (c) => {
+        let s = c.fitness;
+        const topPairs = new Set((analysis.correlation || []).slice(0, 20).map(p => p.pair));
+        for (let i = 0; i < c.nums.length; i++) {
+          for (let j = i + 1; j < c.nums.length; j++) {
+            if (topPairs.has(`${c.nums[i]}-${c.nums[j]}`)) s += 0.2;
+          }
+        }
+        return s;
+      },
+      balanced: (c) => {
+        let s = c.fitness;
+        s += Analyzer.calcSpreadScore(c.nums) * 0.5;
+        const odd = c.nums.filter(n => n % 2 === 1).length;
+        s += (1 - Math.abs(odd - 3) / 3) * 0.3;
+        const digitSet = new Set(c.nums.map(n => n % 10));
+        s += digitSet.size / 10 * 0.2;
+        return s;
+      },
+    };
+
+    const selected = [];
+    const usedIndices = new Set();
+
+    for (const strategy of STRATEGY_KEYS) {
+      const scorer = strategyScorers[strategy];
+      // Score all unused candidates for this strategy
+      let bestIdx = -1;
+      let bestStratScore = -Infinity;
+
+      for (let i = 0; i < candidates.length; i++) {
+        if (usedIndices.has(i)) continue;
+        let stratScore = scorer(candidates[i]);
+
+        // Penalize overlap with already selected sets
+        for (const sel of selected) {
+          stratScore -= _overlap(candidates[i].nums, sel.nums) * 0.3;
+        }
+
+        if (stratScore > bestStratScore) {
+          bestStratScore = stratScore;
+          bestIdx = i;
+        }
+      }
+
+      if (bestIdx >= 0) {
+        usedIndices.add(bestIdx);
+        selected.push({
+          nums: candidates[bestIdx].nums,
+          strategy,
+          fitness: candidates[bestIdx].fitness,
+          confidence: candidates[bestIdx].confidence || 0,
+          algo: candidates[bestIdx].algo,
+        });
+      }
+    }
+
+    return selected;
+  }
+
+  // Calculate coverage (unique numbers across all 5 sets)
+  function _calcCoverage(sets) {
+    const allNums = new Set();
+    sets.forEach(s => s.nums.forEach(n => allNums.add(n)));
+    return allNums.size;
+  }
+
+  // Main generate function
+  function generate(data, advancedMode) {
+    const { candidates, analysis, weights } = AIEngine.generateCandidates(data, advancedMode);
+    const selected = _portfolioSelect(candidates, analysis, weights);
+    const coverage = _calcCoverage(selected);
+
+    // Check for consecutive numbers (Improvement 2)
+    const consecRate = analysis.consecutive ? analysis.consecutive.rate : 0.6;
+    selected.forEach(s => {
+      // ~60% chance to include a consecutive pair based on historical rate
+      if (Math.random() < consecRate) {
+        const sorted = [...s.nums].sort((a, b) => a - b);
+        let hasConsec = false;
+        for (let i = 0; i < sorted.length - 1; i++) {
+          if (sorted[i + 1] - sorted[i] === 1) { hasConsec = true; break; }
+        }
+        // Already has consecutive - fine. If not, don't force it.
+      }
+    });
+
+    const info = Utils.nextDrawInfo();
+    const prediction = {
+      targetDrawId: info.id,
+      targetDate: info.date,
+      targetWeekday: info.weekday,
+      createdAt: new Date().toISOString(),
+      mode: advancedMode ? 'advanced' : 'normal',
+      sets: selected,
+      coverage,
+      verified: false,
+    };
+
+    Storage.savePrediction(prediction);
+    return prediction;
+  }
+
+  return { generate, STRATEGY_NAMES, STRATEGY_KEYS };
+})();
+
+
+// ===== scheduler.js =====
+/* ===== Scheduler (Auto-generate + Lock) ===== */
+
+const Scheduler = (() => {
+  'use strict';
+
+  // Auto-generate: Sunday/Wednesday noon (day before draw)
+  // Lock: After auto-generate until draw day +1 midnight
+
+  function getState() {
+    const saved = Storage.getSchedulerState();
+    if (saved) return saved;
+    return { lockedPredictionId: null, lockTime: null, unlockTime: null, status: 'idle' };
+  }
+
+  function saveState(state) {
+    Storage.saveSchedulerState(state);
+  }
+
+  function getNextDrawInfo() {
+    return Utils.nextDrawInfo();
+  }
+
+  // Check if currently locked
+  function isLocked() {
+    const state = getState();
+    if (!state.lockTime || !state.unlockTime) return false;
+    const now = new Date();
+    return now >= new Date(state.lockTime) && now < new Date(state.unlockTime);
+  }
+
+  // Get lock status details
+  function getLockStatus() {
+    const state = getState();
+    const locked = isLocked();
+    const info = getNextDrawInfo();
+
+    if (locked) {
+      return {
+        status: 'locked',
+        label: 'ロック中',
+        color: 'green',
+        message: `第${state.lockedPredictionId}回 抽選に向けてロック済み`,
+        lockTime: state.lockTime,
+        unlockTime: state.unlockTime,
+      };
+    }
+
+    // Check if we should auto-generate
+    const now = new Date();
+    const drawDate = new Date(info.date + 'T00:00:00');
+    const prevDay = new Date(drawDate);
+    prevDay.setDate(prevDay.getDate() - 1);
+    prevDay.setHours(12, 0, 0, 0);
+
+    if (now >= prevDay && now < drawDate) {
+      return {
+        status: 'pending',
+        label: '自動生成待ち',
+        color: 'yellow',
+        message: `第${info.id}回 ${info.formatted} の予測を自動生成します`,
+      };
+    }
+
+    return {
+      status: 'idle',
+      label: '待機中',
+      color: 'gray',
+      message: `次回: 第${info.id}回 ${info.formatted}（あと${info.daysUntil}日）`,
+      daysUntil: info.daysUntil,
+    };
+  }
+
+  // Try auto-generate (called on app init and periodically)
+  function tryAutoGenerate() {
+    if (isLocked()) return false;
+
+    const info = getNextDrawInfo();
+    const now = new Date();
+    const drawDate = new Date(info.date + 'T00:00:00');
+    const prevDay = new Date(drawDate);
+    prevDay.setDate(prevDay.getDate() - 1);
+    prevDay.setHours(12, 0, 0, 0);
+
+    if (now < prevDay) return false;
+
+    // Check if we already have a prediction for this draw
+    const predictions = Storage.getPredictions();
+    const existing = predictions.find(p => p.targetDrawId === info.id);
+    if (existing) {
+      // Lock existing prediction
+      const unlockDate = new Date(drawDate);
+      unlockDate.setDate(unlockDate.getDate() + 1);
+      saveState({
+        lockedPredictionId: info.id,
+        lockTime: now.toISOString(),
+        unlockTime: unlockDate.toISOString(),
+        status: 'locked',
+      });
+      return false;
+    }
+
+    // Auto-generate
+    const data = Utils.getAllDrawData();
+    if (data.length === 0) return false;
+
+    Predictor.generate(data, false);
+
+    // Lock
+    const unlockDate = new Date(drawDate);
+    unlockDate.setDate(unlockDate.getDate() + 1);
+    saveState({
+      lockedPredictionId: info.id,
+      lockTime: now.toISOString(),
+      unlockTime: unlockDate.toISOString(),
+      status: 'locked',
+    });
+
+    return true;
+  }
+
+  // Force override (advanced search while locked)
+  function forceOverride(data) {
+    const state = getState();
+    const prediction = Predictor.generate(data, true);
+
+    // Re-lock with same times
+    saveState({
+      ...state,
+      status: 'locked',
+    });
+
+    return prediction;
+  }
+
+  // Check and possibly unlock expired locks
+  function checkExpiry() {
+    const state = getState();
+    if (state.unlockTime && new Date() >= new Date(state.unlockTime)) {
+      saveState({ lockedPredictionId: null, lockTime: null, unlockTime: null, status: 'idle' });
+    }
+  }
+
+  return {
+    getState, isLocked, getLockStatus,
+    tryAutoGenerate, forceOverride, checkExpiry,
+  };
+})();
+
+
+// ===== verifier.js =====
+/* ===== Verification Engine (v3) ===== */
+
+const Verifier = (() => {
+  'use strict';
+
+  function verifyPrediction(prediction, draw) {
+    const results = prediction.sets.map(set => {
+      const matched = set.nums.filter(n => draw.nums.includes(n));
+      const bonusMatch = set.nums.includes(draw.bonus);
+      const prize = Utils.prizeTier(matched.length, bonusMatch);
+      return {
+        strategy: set.strategy,
+        nums: set.nums,
+        matched,
+        matchCount: matched.length,
+        bonusMatch,
+        prize,
+        confidence: set.confidence || 0,
+      };
+    });
+
+    const bestMatch = results.reduce((best, r) =>
+      r.matchCount > best.matchCount ? r : best, results[0]);
+
+    const verification = {
+      targetDrawId: prediction.targetDrawId,
+      drawDate: draw.date,
+      actualNums: draw.nums,
+      actualBonus: draw.bonus,
+      results,
+      bestMatch: { strategy: bestMatch.strategy, matchCount: bestMatch.matchCount },
+      verifiedAt: new Date().toISOString(),
+    };
+
+    Storage.saveVerification(verification);
+    Storage.updatePrediction(prediction.targetDrawId, { verified: true });
+
+    // Auto-learn if enabled
+    const settings = Storage.getSettings();
+    if (settings.autoLearn) {
+      Learner.autoLearn();
+    }
+
+    return verification;
+  }
+
+  function verifyAll() {
+    const predictions = Storage.getPredictions();
+    const draws = Utils.getAllDrawData();
+    const verifications = Storage.getVerifications();
+    const verifiedIds = new Set(verifications.map(v => v.targetDrawId));
+
+    let count = 0;
+    predictions.forEach(pred => {
+      if (pred.verified || verifiedIds.has(pred.targetDrawId)) return;
+      const draw = draws.find(d => d.id === pred.targetDrawId);
+      if (draw) {
+        verifyPrediction(pred, draw);
+        count++;
+      }
+    });
+    return count;
+  }
+
+  function getStats(lastN) {
+    const verifications = Storage.getVerifications();
+    const data = lastN ? verifications.slice(0, lastN) : verifications;
+
+    if (data.length === 0) {
+      return { total: 0, avgMatch: '0', maxMatch: 0, prizeCount: {}, strategyStats: {} };
+    }
+
+    let totalMatch = 0;
+    let totalSets = 0;
+    let maxMatch = 0;
+    const prizeCount = {};
+    const strategyStats = {};
+
+    data.forEach(v => {
+      v.results.forEach(r => {
+        totalMatch += r.matchCount;
+        totalSets++;
+        if (r.matchCount > maxMatch) maxMatch = r.matchCount;
+        prizeCount[r.prize] = (prizeCount[r.prize] || 0) + 1;
+
+        if (!strategyStats[r.strategy]) {
+          strategyStats[r.strategy] = { total: 0, matchSum: 0, prizes: {} };
+        }
+        strategyStats[r.strategy].total++;
+        strategyStats[r.strategy].matchSum += r.matchCount;
+        strategyStats[r.strategy].prizes[r.prize] = (strategyStats[r.strategy].prizes[r.prize] || 0) + 1;
+      });
+    });
+
+    // Compute averages
+    for (const key of Object.keys(strategyStats)) {
+      strategyStats[key].avgMatch = (strategyStats[key].matchSum / strategyStats[key].total).toFixed(2);
+    }
+
+    return {
+      total: data.length,
+      totalSets,
+      avgMatch: totalSets > 0 ? (totalMatch / totalSets).toFixed(2) : '0',
+      maxMatch,
+      prizeCount,
+      strategyStats,
+    };
+  }
+
+  // Get accuracy trend data for chart
+  function getAccuracyTrend() {
+    const verifications = Storage.getVerifications();
+    if (verifications.length === 0) return [];
+
+    // Reverse to chronological order
+    const sorted = [...verifications].reverse();
+    const trend = [];
+    let cumSum = 0;
+    let cumCount = 0;
+
+    sorted.forEach((v, idx) => {
+      const avgForThis = v.results.reduce((s, r) => s + r.matchCount, 0) / v.results.length;
+      cumSum += avgForThis;
+      cumCount++;
+      trend.push({
+        drawId: v.targetDrawId,
+        date: v.drawDate,
+        avgMatch: avgForThis,
+        cumAvg: cumSum / cumCount,
+        idx: idx + 1,
+      });
+    });
+
+    return trend;
+  }
+
+  return { verifyPrediction, verifyAll, getStats, getAccuracyTrend };
+})();
+
+
+// ===== learner.js =====
+/* ===== Auto-Learning Engine (v3 - W1-W12) ===== */
+
+const Learner = (() => {
+  'use strict';
+
+  const LEARNING_RATE = 0.1;
+  const MIN_SAMPLES = 3;
+  const MIN_WEIGHT = 0.03;
+  const MAX_WEIGHT = 0.25;
+
+  const WEIGHT_KEYS = ['W1','W2','W3','W4','W5','W6','W7','W8','W9','W10','W11','W12'];
+
+  // Strategy to weight factor mapping
+  const STRATEGY_BOOSTS = {
+    optimal: ['W1','W8','W9'],
+    trend: ['W9','W5','W6'],
+    overdue: ['W2','W11','W4'],
+    correlation: ['W8','W12','W3'],
+    balanced: ['W6','W7','W4','W5'],
+  };
+
+  function autoLearn() {
+    const verifications = Storage.getVerifications();
+    if (verifications.length < MIN_SAMPLES) return null;
+
+    const currentWeights = Storage.getWeights();
+    const previousWeights = { ...currentWeights };
+
+    // Calculate strategy performance
+    const stratPerf = {};
+    verifications.forEach(v => {
+      v.results.forEach(r => {
+        if (!stratPerf[r.strategy]) stratPerf[r.strategy] = { sum: 0, count: 0 };
+        stratPerf[r.strategy].sum += r.matchCount;
+        stratPerf[r.strategy].count++;
+      });
+    });
+
+    // Find best performing strategy
+    let bestStrategy = null;
+    let bestAvg = 0;
+    for (const [strat, perf] of Object.entries(stratPerf)) {
+      const avg = perf.sum / perf.count;
+      if (avg > bestAvg) {
+        bestAvg = avg;
+        bestStrategy = strat;
+      }
+    }
+
+    if (!bestStrategy) return null;
+
+    // Calculate overall average
+    let totalSum = 0, totalCount = 0;
+    for (const perf of Object.values(stratPerf)) {
+      totalSum += perf.sum;
+      totalCount += perf.count;
+    }
+    const overallAvg = totalCount > 0 ? totalSum / totalCount : 0;
+
+    // Adjust weights based on best strategy
+    const newWeights = { ...currentWeights };
+    const boostKeys = STRATEGY_BOOSTS[bestStrategy] || [];
+
+    // Boost weights associated with best strategy
+    for (const key of WEIGHT_KEYS) {
+      const isBoost = boostKeys.includes(key);
+      if (isBoost && bestAvg > overallAvg) {
+        // Increase this weight
+        newWeights[key] += LEARNING_RATE * (bestAvg - overallAvg) * 0.02;
+      } else if (!isBoost && bestAvg > overallAvg) {
+        // Slightly decrease non-boost weights
+        newWeights[key] -= LEARNING_RATE * (bestAvg - overallAvg) * 0.005;
+      }
+    }
+
+    // Clamp weights
+    for (const key of WEIGHT_KEYS) {
+      newWeights[key] = Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, newWeights[key]));
+    }
+
+    // Normalize to sum to 1.0
+    const total = WEIGHT_KEYS.reduce((s, k) => s + newWeights[k], 0);
+    for (const key of WEIGHT_KEYS) {
+      newWeights[key] = parseFloat((newWeights[key] / total).toFixed(4));
+    }
+
+    // Ensure sum is exactly 1.0
+    const finalTotal = WEIGHT_KEYS.reduce((s, k) => s + newWeights[k], 0);
+    if (Math.abs(finalTotal - 1.0) > 0.001) {
+      newWeights.W1 += 1.0 - finalTotal;
+    }
+
+    Storage.saveWeights(newWeights);
+
+    // Save learning entry
+    const entry = {
+      learnedAt: new Date().toISOString(),
+      triggerDrawId: verifications[0].targetDrawId,
+      bestStrategy,
+      bestAvg: bestAvg,
+      overallAvg,
+      previousWeights,
+      newWeights: { ...newWeights },
+      sampleCount: verifications.length,
+    };
+    Storage.saveLearningEntry(entry);
+
+    return entry;
+  }
+
+  function resetWeights() {
+    Storage.saveWeights({ ...Storage.DEFAULT_WEIGHTS });
+  }
+
+  function getStatus() {
+    const verifications = Storage.getVerifications();
+    const history = Storage.getLearningHistory();
+    const currentWeights = Storage.getWeights();
+    const previousWeights = history.length > 0 ? history[0].previousWeights : null;
+
+    // Find best strategy
+    const stratPerf = {};
+    verifications.forEach(v => {
+      v.results.forEach(r => {
+        if (!stratPerf[r.strategy]) stratPerf[r.strategy] = { sum: 0, count: 0 };
+        stratPerf[r.strategy].sum += r.matchCount;
+        stratPerf[r.strategy].count++;
+      });
+    });
+
+    let bestStrategy = null;
+    let bestStrategyAvg = 0;
+    for (const [strat, perf] of Object.entries(stratPerf)) {
+      const avg = perf.sum / perf.count;
+      if (avg > bestStrategyAvg) {
+        bestStrategyAvg = avg;
+        bestStrategy = strat;
+      }
+    }
+
+    // Max match
+    let maxMatch = 0;
+    verifications.forEach(v => {
+      v.results.forEach(r => {
+        if (r.matchCount > maxMatch) maxMatch = r.matchCount;
+      });
+    });
+
+    return {
+      learningCount: history.length,
+      totalSamples: verifications.length,
+      currentWeights,
+      previousWeights,
+      bestStrategy,
+      bestStrategyAvg,
+      maxMatch,
+      recentHistory: history.slice(0, 10),
+    };
+  }
+
+  return { autoLearn, resetWeights, getStatus };
+})();
+
+
+// ===== backtest.js =====
+/* ===== Backtest Engine (Improvement 16) ===== */
+
+const Backtest = (() => {
+  'use strict';
+
+  function run(data, currentWeights, lastN) {
+    lastN = lastN || 100;
+    const results = [];
+    const maxIdx = Math.min(lastN, data.length - 20); // Need at least 20 prior draws
+
+    for (let i = 0; i < maxIdx; i++) {
+      const targetDraw = data[i];
+      const priorData = data.slice(i + 1); // Only use data before this draw
+
+      if (priorData.length < 20) continue;
+
+      // Generate analysis from prior data
+      const analysis = Analyzer.fullAnalysis(priorData);
+
+      // Generate 5 candidates using simplified versions of algorithms
+      const candidates = [];
+
+      // Quick MC
+      let bestMC = null, bestMCS = -Infinity;
+      for (let t = 0; t < 5000; t++) {
+        const nums = _quickWeightedSet(analysis);
+        const score = _quickFitness(nums, analysis, currentWeights);
+        if (score > bestMCS) { bestMCS = score; bestMC = nums; }
+      }
+      if (bestMC) candidates.push({ nums: bestMC, fitness: bestMCS });
+
+      // Quick GA
+      let pop = [];
+      for (let p = 0; p < 50; p++) pop.push(_quickWeightedSet(analysis));
+      for (let gen = 0; gen < 30; gen++) {
+        const scored = pop.map(p => ({ nums: p, score: _quickFitness(p, analysis, currentWeights) }));
+        scored.sort((a, b) => b.score - a.score);
+        const newPop = [scored[0].nums, scored[1].nums];
+        while (newPop.length < 50) {
+          const p1 = scored[Math.floor(Math.random() * 10)].nums;
+          const p2 = scored[Math.floor(Math.random() * 10)].nums;
+          const child = _crossover(p1, p2);
+          newPop.push(Math.random() < 0.2 ? _mutate(child) : child);
+        }
+        pop = newPop;
+      }
+      const gaScored = pop.map(p => ({ nums: p, score: _quickFitness(p, analysis, currentWeights) }));
+      gaScored.sort((a, b) => b.score - a.score);
+      candidates.push({ nums: gaScored[0].nums, fitness: gaScored[0].score });
+
+      // Quick SA
+      let current = _quickWeightedSet(analysis);
+      let cs = _quickFitness(current, analysis, currentWeights);
+      let best = current, bs = cs, temp = 500;
+      while (temp > 1) {
+        for (let t = 0; t < 20; t++) {
+          const neighbor = _mutate([...current]);
+          const ns = _quickFitness(neighbor, analysis, currentWeights);
+          if (ns > cs || Math.random() < Math.exp((ns - cs) / temp)) { current = neighbor; cs = ns; }
+          if (cs > bs) { best = current; bs = cs; }
+        }
+        temp *= 0.95;
+      }
+      candidates.push({ nums: best, fitness: bs });
+
+      // Additional random weighted sets
+      for (let t = 0; t < 2000; t++) {
+        const nums = _quickWeightedSet(analysis);
+        const score = _quickFitness(nums, analysis, currentWeights);
+        candidates.push({ nums, fitness: score });
+      }
+
+      // Select top 5 with diversity
+      candidates.sort((a, b) => b.fitness - a.fitness);
+      const selected = [candidates[0]];
+      for (let c = 1; c < candidates.length && selected.length < 5; c++) {
+        const overlap = selected.some(s => s.nums.filter(n => candidates[c].nums.includes(n)).length >= 4);
+        if (!overlap) selected.push(candidates[c]);
+      }
+
+      // Check matches
+      const matchResults = selected.map(s => {
+        const matched = s.nums.filter(n => targetDraw.nums.includes(n));
+        const bonusMatch = s.nums.includes(targetDraw.bonus);
+        return {
+          nums: s.nums,
+          matched,
+          matchCount: matched.length,
+          bonusMatch,
+          prize: Utils.prizeTier(matched.length, bonusMatch),
+        };
+      });
+
+      const bestResult = matchResults.reduce((b, r) => r.matchCount > b.matchCount ? r : b, matchResults[0]);
+
+      results.push({
+        drawId: targetDraw.id,
+        date: targetDraw.date,
+        actual: targetDraw.nums,
+        predictions: matchResults,
+        bestMatchCount: bestResult.matchCount,
+        bestPrize: bestResult.prize,
+      });
+    }
+
+    // Aggregate stats
+    const totalMatches = results.reduce((s, r) => s + r.bestMatchCount, 0);
+    const avgMatch = results.length > 0 ? (totalMatches / results.length).toFixed(2) : '0';
+    const maxMatch = results.length > 0 ? Math.max(...results.map(r => r.bestMatchCount)) : 0;
+    const prizeCount = {};
+    results.forEach(r => {
+      prizeCount[r.bestPrize] = (prizeCount[r.bestPrize] || 0) + 1;
+    });
+
+    const summary = {
+      totalDraws: results.length,
+      avgMatch,
+      maxMatch,
+      prizeCount,
+      runAt: new Date().toISOString(),
+    };
+
+    const output = { summary, results };
+    Storage.saveBacktestResults(output);
+    return output;
+  }
+
+  function _quickWeightedSet(analysis) {
+    const scoreMap = {};
+    for (let n = 1; n <= 43; n++) {
+      scoreMap[n] = (analysis.frequency[n] ? analysis.frequency[n].rate : 0) * 5 +
+                    (analysis.dormancy[n] || 0) / 50 + 0.5 + Math.random() * 0.3;
+    }
+    return _weightedSample(scoreMap, 6);
+  }
+
+  function _weightedSample(scoreMap, k) {
+    const entries = Object.entries(scoreMap).map(([n, s]) => [parseInt(n), Math.max(s, 0.001)]);
+    const nums = [];
+    const avail = [...entries];
+    while (nums.length < k && avail.length > 0) {
+      const total = avail.reduce((s, [, w]) => s + w, 0);
+      let r = Math.random() * total;
+      for (let i = 0; i < avail.length; i++) {
+        r -= avail[i][1];
+        if (r <= 0) { nums.push(avail[i][0]); avail.splice(i, 1); break; }
+      }
+    }
+    return nums.sort((a, b) => a - b);
+  }
+
+  function _quickFitness(nums, analysis, weights) {
+    const sorted = [...nums].sort((a, b) => a - b);
+    let score = 0;
+    const freqScores = sorted.map(n => analysis.frequency[n] ? analysis.frequency[n].rate : 0);
+    score += (weights.W1 || 0.16) * (freqScores.reduce((a, b) => a + b, 0) / 6) * 10;
+    const maxDorm = Math.max(...Object.values(analysis.dormancy), 1);
+    score += (weights.W2 || 0.12) * sorted.reduce((s, n) => s + (analysis.dormancy[n] || 0) / maxDorm, 0) / 6;
+    const odd = sorted.filter(n => n % 2 === 1).length;
+    score += (weights.W4 || 0.08) * (1 - Math.abs(odd - 3) / 3);
+    const sum = sorted.reduce((a, b) => a + b, 0);
+    score += (weights.W5 || 0.08) * Math.exp(-(sum - 132) ** 2 / 1800);
+    score += (weights.W6 || 0.07) * Analyzer.calcSpreadScore(sorted);
+    return score;
+  }
+
+  function _crossover(p1, p2) {
+    const pool = Array.from(new Set([...p1, ...p2]));
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, 6).sort((a, b) => a - b);
+  }
+
+  function _mutate(nums) {
+    const result = [...nums];
+    const idx = Math.floor(Math.random() * 6);
+    let newNum;
+    do { newNum = Math.floor(Math.random() * 43) + 1; } while (result.includes(newNum));
+    result[idx] = newNum;
+    return result.sort((a, b) => a - b);
+  }
+
+  return { run };
+})();
+
+
+// ===== charts.js =====
+/* ===== Chart.js Graph Rendering (v3 - Heatmap, Trends) ===== */
+
+const Charts = (() => {
+  'use strict';
+
+  const chartInstances = {};
+
+  function _destroy(id) {
+    if (chartInstances[id]) {
+      chartInstances[id].destroy();
+      delete chartInstances[id];
+    }
+  }
+
+  function destroyAll() {
+    for (const id of Object.keys(chartInstances)) _destroy(id);
+  }
+
+  function _colors() {
+    const isDark = document.body.getAttribute('data-theme') !== 'light';
+    return {
+      text: isDark ? '#e4e4e7' : '#1a1a2e',
+      grid: isDark ? '#333' : '#ddd',
+      bg: isDark ? '#141420' : '#fff',
+      accent: '#f59e0b',
+      accent2: '#00e5ff',
+      hot: '#ef4444',
+      cold: '#3b82f6',
+    };
+  }
+
+  // 1. Frequency horizontal bar chart
+  function renderFrequencyChart(canvasId, frequency) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    const labels = [];
+    const counts = [];
+    const bgColors = [];
+    const avg = Object.values(frequency).reduce((s, f) => s + f.count, 0) / 43;
+
+    for (let n = 1; n <= 43; n++) {
+      labels.push(String(n).padStart(2, '0'));
+      counts.push(frequency[n] ? frequency[n].count : 0);
+      const cnt = frequency[n] ? frequency[n].count : 0;
+      bgColors.push(cnt >= avg * 1.2 ? c.hot : cnt <= avg * 0.8 ? c.cold : c.accent);
+    }
+
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: counts,
+          backgroundColor: bgColors,
+          borderRadius: 3,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: c.text }, grid: { color: c.grid } },
+          y: { ticks: { color: c.text, font: { size: 10, family: 'JetBrains Mono' } }, grid: { display: false } },
+        },
+      },
+    });
+  }
+
+  // 2. Range distribution doughnut
+  function renderRangeChart(canvasId, rangeDist) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(rangeDist),
+        datasets: [{
+          data: Object.values(rangeDist),
+          backgroundColor: ['#eab308', '#ef4444', '#3b82f6', '#22c55e', '#a855f7'],
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { labels: { color: c.text, font: { size: 12 } } },
+        },
+      },
+    });
+  }
+
+  // 3. Odd/Even bar chart
+  function renderOddEvenChart(canvasId, oddEven) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    const labels = Object.keys(oddEven);
+    const values = Object.values(oddEven);
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: c.accent, borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: c.text } },
+          y: { ticks: { color: c.text }, grid: { color: c.grid } },
+        },
+      },
+    });
+  }
+
+  // 4. Sum histogram
+  function renderSumHistogram(canvasId, sumStats) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    const labels = Object.keys(sumStats.histogram);
+    const values = Object.values(sumStats.histogram);
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: c.accent2, borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          annotation: sumStats.mean ? {
+            annotations: { meanLine: { type: 'line', xMin: sumStats.mean, xMax: sumStats.mean, borderColor: c.hot, borderWidth: 2 } }
+          } : undefined,
+        },
+        scales: {
+          x: { ticks: { color: c.text, font: { size: 10 } } },
+          y: { ticks: { color: c.text }, grid: { color: c.grid } },
+        },
+      },
+    });
+  }
+
+  // 5. Strategy comparison bar chart
+  function renderStrategyChart(canvasId, strategyStats) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    const names = {
+      optimal: 'AI最適解', trend: 'トレンド', overdue: '出遅れ',
+      correlation: '高相関', balanced: '分散',
+      hot: 'ホット', cold: 'コールド', composite: '統合AI',
+    };
+    const labels = Object.keys(strategyStats).map(k => names[k] || k);
+    const avgs = Object.values(strategyStats).map(s => parseFloat(s.avgMatch));
+    const colors = ['#f59e0b', '#00e5ff', '#ef4444', '#22c55e', '#a855f7', '#ec4899', '#6366f1', '#14b8a6'];
+
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ label: '平均一致数', data: avgs, backgroundColor: colors.slice(0, labels.length), borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: c.text, font: { size: 11 } } },
+          y: { ticks: { color: c.text }, grid: { color: c.grid }, beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  // 6. Accuracy trend line chart (Improvement 18)
+  function renderAccuracyTrend(canvasId, trendData) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels: trendData.map(t => `#${t.drawId}`),
+        datasets: [
+          {
+            label: '各回平均一致数',
+            data: trendData.map(t => t.avgMatch),
+            borderColor: c.accent,
+            backgroundColor: c.accent + '33',
+            fill: true,
+            tension: 0.3,
+            pointRadius: 3,
+          },
+          {
+            label: '累積平均',
+            data: trendData.map(t => t.cumAvg),
+            borderColor: c.accent2,
+            borderDash: [5, 5],
+            fill: false,
+            tension: 0.3,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { labels: { color: c.text } } },
+        scales: {
+          x: { ticks: { color: c.text, font: { size: 9 }, maxRotation: 45 }, grid: { color: c.grid } },
+          y: { ticks: { color: c.text }, grid: { color: c.grid }, beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  // 7. Backtest results bar chart
+  function renderBacktestChart(canvasId, results) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    const colors = results.map(r => {
+      if (r.bestMatchCount >= 5) return '#ef4444';
+      if (r.bestMatchCount >= 4) return '#f59e0b';
+      if (r.bestMatchCount >= 3) return '#22c55e';
+      if (r.bestMatchCount >= 2) return '#3b82f6';
+      return '#6b7280';
+    });
+
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: results.map(r => `#${r.drawId}`),
+        datasets: [{
+          label: '最高一致数',
+          data: results.map(r => r.bestMatchCount),
+          backgroundColor: colors,
+          borderRadius: 2,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: c.text, font: { size: 8 }, maxRotation: 90 }, grid: { display: false } },
+          y: { ticks: { color: c.text, stepSize: 1 }, grid: { color: c.grid }, beginAtZero: true, max: 6 },
+        },
+      },
+    });
+  }
+
+  // 8. Last digit distribution bar chart
+  function renderLastDigitChart(canvasId, lastDigit) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    const labels = Object.keys(lastDigit);
+    const values = Object.values(lastDigit).map(d => d.count);
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: c.accent, borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: c.text }, title: { display: true, text: '末尾数字', color: c.text } },
+          y: { ticks: { color: c.text }, grid: { color: c.grid } },
+        },
+      },
+    });
+  }
+
+  // 9. Weight bars chart (W1-W12)
+  function renderWeightsChart(canvasId, weights) {
+    _destroy(canvasId);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const c = _colors();
+    const labels = Object.keys(Storage.WEIGHT_LABELS).map(k => Storage.WEIGHT_LABELS[k]);
+    const values = Object.keys(Storage.WEIGHT_LABELS).map(k => (weights[k] || 0) * 100);
+    const colors = ['#f59e0b','#ef4444','#8b5cf6','#22c55e','#3b82f6','#ec4899',
+                    '#14b8a6','#f97316','#06b6d4','#84cc16','#6366f1','#e11d48'];
+
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{ data: values, backgroundColor: colors, borderRadius: 4 }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: c.text, font: { size: 9 }, maxRotation: 45 } },
+          y: { ticks: { color: c.text, callback: v => v + '%' }, grid: { color: c.grid }, beginAtZero: true },
+        },
+      },
+    });
+  }
+
+  return {
+    renderFrequencyChart, renderRangeChart, renderOddEvenChart,
+    renderSumHistogram, renderStrategyChart, renderAccuracyTrend,
+    renderBacktestChart, renderLastDigitChart, renderWeightsChart,
+    destroyAll,
+  };
+})();
+
+
+// ===== app.js =====
+/* ===== Main Application (v3 Enhanced - All 7 Tabs) ===== */
+
+const App = (() => {
+  'use strict';
+
+  let currentTab = 'tabPredict';
+  let historyPage = 0;
+  const HISTORY_PAGE_SIZE = 20;
+
+  /* ---------- Init ---------- */
+  function init() {
+    applyTheme();
+    renderHeader();
+    bindTabEvents();
+    bindPredictEvents();
+    bindHistoryEvents();
+    bindRecordsEvents();
+    bindVerifyEvents();
+    bindBacktestEvents();
+    bindSettingsEvents();
+
+    // Scheduler check
+    Scheduler.checkExpiry();
+    Scheduler.tryAutoGenerate();
+
+    renderCurrentTab();
+
+    // Service Worker (disabled in standalone mode)
+    // if ('serviceWorker' in navigator) {
+    //   navigator.serviceWorker.register('./sw.js').catch(function() {});
+    // }
+
+    // Pull-to-refresh (Improvement 11)
+    initPullToRefresh();
+  }
+
+  /* ---------- Theme ---------- */
+  function applyTheme() {
+    var settings = Storage.getSettings();
+    var theme = settings.theme || 'dark';
+    if (theme === 'system') {
+      theme = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.body.setAttribute('data-theme', theme);
+    document.querySelectorAll('.theme-btn').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.theme === settings.theme);
+    });
+  }
+
+  /* ---------- Header ---------- */
+  function renderHeader() {
+    var info = Utils.nextDrawInfo();
+    var el = document.getElementById('nextDrawInfo');
+    if (el) el.textContent = '次回第' + info.id + '回 ' + info.formatted;
+  }
+
+  /* ---------- Tabs ---------- */
+  function bindTabEvents() {
+    document.querySelectorAll('.tab-item').forEach(function(btn) {
+      btn.addEventListener('click', function() { switchTab(btn.dataset.tab); });
+    });
+  }
+
+  function switchTab(tabId) {
+    currentTab = tabId;
+    document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
+    document.querySelectorAll('.tab-item').forEach(function(el) { el.classList.remove('active'); });
+    var tabEl = document.getElementById(tabId);
+    if (tabEl) tabEl.classList.add('active');
+    var tabBtn = document.querySelector('[data-tab="' + tabId + '"]');
+    if (tabBtn) tabBtn.classList.add('active');
+    Charts.destroyAll();
+    renderCurrentTab();
+  }
+
+  function renderCurrentTab() {
+    switch (currentTab) {
+      case 'tabPredict': renderPredict(); break;
+      case 'tabAnalysis': renderAnalysis(); break;
+      case 'tabHistory': renderHistory(); break;
+      case 'tabRecords': renderRecords(); break;
+      case 'tabVerify': renderVerify(); break;
+      case 'tabBacktest': renderBacktest(); break;
+      case 'tabSettings': renderSettings(); break;
+    }
+  }
+
+  /* ========== 1. PREDICT TAB ========== */
+  function bindPredictEvents() {
+    document.getElementById('btnGenerate').addEventListener('click', function() {
+      if (Scheduler.isLocked()) {
+        Utils.showToast('予測はロック中です');
+        return;
+      }
+      doGenerate(false);
+    });
+
+    document.getElementById('btnAdvanced').addEventListener('click', function() {
+      if (Scheduler.isLocked()) {
+        if (!confirm('ロック中ですが、高度探索で上書きしますか？')) return;
+      }
+      doGenerate(true);
+    });
+  }
+
+  function doGenerate(advanced) {
+    var data = Utils.getAllDrawData();
+    if (data.length === 0) { alert('抽選データがありません。'); return; }
+
+    var overlay = document.getElementById('loadingOverlay');
+    var loadText = document.getElementById('loadingText');
+    overlay.classList.add('active');
+    loadText.textContent = advanced ? 'AI高度探索モードで解析中...' : 'AIが予測を生成中...';
+
+    Utils.hapticFeedback();
+
+    setTimeout(function() {
+      try {
+        if (advanced && Scheduler.isLocked()) {
+          Scheduler.forceOverride(data);
+        } else {
+          Predictor.generate(data, advanced);
+        }
+      } catch (e) {
+        console.error(e);
+        alert('予測生成中にエラーが発生しました。');
+      }
+      overlay.classList.remove('active');
+      Utils.hapticFeedback();
+      renderPredict();
+    }, 100);
+  }
+
+  function renderPredict() {
+    // Dashboard widgets (Improvement 13)
+    renderDashboardWidgets();
+    // Scheduler status
+    renderSchedulerStatus();
+
+    var predictions = Storage.getPredictions();
+    var container = document.getElementById('predictionsDisplay');
+
+    // Algorithm tags
+    var tagsEl = document.getElementById('algoTags');
+    tagsEl.innerHTML = ['モンテカルロ', '遺伝的アルゴリズム', '焼きなまし法', 'エントロピー最適化', '相関ネットワーク', 'トレンド追従', '出遅れ回帰']
+      .map(function(t) { return '<span class="algo-tag">' + t + '</span>'; }).join('');
+
+    if (predictions.length === 0) {
+      container.innerHTML = '<div class="card" style="text-align:center;padding:32px"><p style="color:var(--text-muted)">下のボタンをタップして予想番号を生成してください</p></div>';
+      return;
+    }
+
+    var latest = predictions[0];
+    var html = '<div class="card"><h3>第' + latest.targetDrawId + '回 ' + Utils.formatDate(latest.targetDate) + '（' + latest.targetWeekday + '）抽選分</h3>';
+    html += '<div style="font-size:0.7rem;color:var(--text-muted)">生成: ' + Utils.formatDateTime(latest.createdAt) + ' / モード: ' + (latest.mode === 'advanced' ? '高度探索' : '通常') + ' / カバー率: ' + (latest.coverage || '-') + '/43</div></div>';
+
+    latest.sets.forEach(function(set, i) {
+      var name = Predictor.STRATEGY_NAMES[set.strategy] || set.strategy;
+      var sum = Utils.calcSum(set.nums);
+      var oe = Utils.calcOddEvenStr(set.nums);
+      var conf = set.confidence || 0;
+      var confClass = conf >= 70 ? 'confidence-high' : conf >= 50 ? 'confidence-mid' : 'confidence-low';
+      var numsText = set.nums.map(function(n) { return String(n).padStart(2, '0'); }).join(' ');
+
+      html += '<div class="prediction-card" style="animation-delay:' + (i * 0.08) + 's">';
+      html += '<div class="prediction-card-header">';
+      html += '<span class="strategy-label">' + ['①','②','③','④','⑤'][i] + ' ' + name + '</span>';
+      html += '<span class="confidence-badge ' + confClass + '">確信度 ' + conf + '%</span>';
+      html += '</div>';
+      html += '<div class="balls-row">' + Utils.renderBalls(set.nums, { animate: true, clickable: true }) + '</div>';
+      html += '<div class="prediction-meta">合計: ' + sum + ' / 奇偶: ' + oe + (set.algo ? ' / Algo: ' + set.algo : '') + '</div>';
+
+      // Copyable textarea (required spec)
+      html += Utils.renderCopyableTextarea(numsText, 'copy_pred_' + i);
+
+      // Copy button + Mark sheet
+      html += '<div class="prediction-actions">';
+      html += '<button class="btn-copy" onclick="Utils.copyToClipboard(\'' + numsText + '\')">番号をコピー</button>';
+      html += '</div>';
+      html += Utils.renderMarkSheet(set.nums);
+      html += '</div>';
+    });
+
+    container.innerHTML = html;
+
+    // Update generate button state
+    var locked = Scheduler.isLocked();
+    document.getElementById('btnGenerate').disabled = locked;
+  }
+
+  function renderDashboardWidgets() {
+    var el = document.getElementById('dashboardWidgets');
+    var info = Utils.nextDrawInfo();
+    var learningStatus = Learner.getStatus();
+    var predictions = Storage.getPredictions();
+
+    el.innerHTML =
+      '<div class="widget-card"><div class="widget-value">' + info.daysUntil + '日</div><div class="widget-label">次回抽選まで</div></div>' +
+      '<div class="widget-card"><div class="widget-value">' + learningStatus.learningCount + '回</div><div class="widget-label">学習回数</div></div>' +
+      '<div class="widget-card"><div class="widget-value">' + (learningStatus.maxMatch || 0) + '個</div><div class="widget-label">最高一致</div></div>' +
+      '<div class="widget-card"><div class="widget-value">' + predictions.length + '回</div><div class="widget-label">累計予測</div></div>';
+  }
+
+  function renderSchedulerStatus() {
+    var status = Scheduler.getLockStatus();
+    var statusEl = document.getElementById('schedulerStatus');
+    var bannerEl = document.getElementById('lockBanner');
+
+    statusEl.innerHTML = '<span class="status-dot ' + status.color + '"></span><span>' + status.label + ': ' + status.message + '</span>';
+
+    if (status.status === 'locked') {
+      bannerEl.innerHTML = '<div class="lock-banner">この予測は' + (status.lockTime ? Utils.formatDateTime(status.lockTime) : '') + 'にロックされました。解除予定: ' + (status.unlockTime ? Utils.formatDateTime(status.unlockTime) : '') + '</div>';
+    } else {
+      bannerEl.innerHTML = '';
+    }
+  }
+
+  /* ========== 2. ANALYSIS TAB ========== */
+  function renderAnalysis(period) {
+    var data = Utils.getAllDrawData();
+    if (data.length === 0) {
+      document.getElementById('analysisContent').innerHTML = '<p style="text-align:center;color:var(--text-muted)">データがありません</p>';
+      return;
+    }
+
+    period = period || parseInt(document.querySelector('.period-btn.active').dataset.period) || 10;
+    if (isNaN(period)) period = null;
+
+    var analysis = Analyzer.fullAnalysis(data, period === 'all' ? null : period);
+    var content = document.getElementById('analysisContent');
+
+    var html = '';
+
+    // (a) Frequency chart
+    html += '<div class="card"><h3>出現頻度</h3><div class="chart-container" style="height:' + (43 * 18) + 'px"><canvas id="chartFreq"></canvas></div></div>';
+
+    // (b) Heatmap (Improvement 17)
+    html += '<div class="card"><h3>番号ヒートマップ</h3>' + renderHeatmap(analysis.frequency) + '</div>';
+
+    // (c) Range chart
+    html += '<div class="card"><h3>番号帯分布</h3><div class="chart-container" style="height:250px"><canvas id="chartRange"></canvas></div></div>';
+
+    // (d) Odd/Even
+    html += '<div class="card"><h3>奇偶パターン</h3><div class="chart-container" style="height:200px"><canvas id="chartOE"></canvas></div></div>';
+
+    // (e) Sum histogram
+    html += '<div class="card"><h3>合計値ヒストグラム（平均: ' + (analysis.sumStats.mean || '-') + '）</h3><div class="chart-container" style="height:200px"><canvas id="chartSum"></canvas></div></div>';
+
+    // (f) Dormancy ranking
+    html += '<div class="card"><h3>出遅れランキング TOP10</h3><ul class="dormancy-list">' + renderDormancyList(analysis.dormancy) + '</ul></div>';
+
+    // (g) Pairs + Triplets (Improvement 6)
+    html += '<div class="card"><h3>番号ペア TOP10</h3><ul class="correlation-list">' + renderCorrelationList(analysis.correlation) + '</ul>';
+    html += '<h3 style="margin-top:12px">トリプレット TOP5</h3><ul class="correlation-list">' + renderTripletList(analysis.triplets) + '</ul></div>';
+
+    // (h) Weekday
+    html += '<div class="card"><h3>月曜 vs 木曜の傾向</h3><p style="font-size:0.75rem;color:var(--text-muted)">月曜: ' + (analysis.weekdayTrend.monday.count || 0) + '回 / 木曜: ' + (analysis.weekdayTrend.thursday.count || 0) + '回</p>' + renderWeekdayDiff(analysis.weekdayTrend) + '</div>';
+
+    // (i) Consecutive (Improvement 2)
+    html += '<div class="card"><h3>連番パターン分析</h3><p style="font-size:0.8rem">連番出現率: <strong>' + (analysis.consecutive.rate * 100).toFixed(1) + '%</strong>（' + analysis.consecutive.withConsec + '/' + analysis.consecutive.total + '回）</p>';
+    if (analysis.consecutive.topPairs.length > 0) {
+      html += '<ul class="dormancy-list">' + analysis.consecutive.topPairs.slice(0, 5).map(function(p) {
+        var nums = p.pair.split('-').map(Number);
+        return '<li><span>' + Utils.renderBall(nums[0]) + Utils.renderBall(nums[1]) + '</span><span style="font-family:var(--font-mono);font-weight:700">' + p.count + '回</span></li>';
+      }).join('') + '</ul>';
+    }
+    html += '</div>';
+
+    // (j) Last digit (Improvement 3)
+    html += '<div class="card"><h3>末尾数字分布</h3><div class="chart-container" style="height:200px"><canvas id="chartLastDigit"></canvas></div></div>';
+
+    // (k) Interval distribution (Improvement 4)
+    html += '<div class="card"><h3>出現間隔分析（次回出現確率 TOP10）</h3>' + renderIntervalTop(analysis.intervalDist) + '</div>';
+
+    // (l) Hot/Cold (Improvement 5)
+    html += '<div class="card"><h3>温冷サイクル</h3>' + renderHotCold(analysis.hotCold) + '</div>';
+
+    content.innerHTML = html;
+
+    // Render charts after DOM update
+    requestAnimationFrame(function() {
+      Charts.renderFrequencyChart('chartFreq', analysis.frequency);
+      Charts.renderRangeChart('chartRange', analysis.rangeDist);
+      Charts.renderOddEvenChart('chartOE', analysis.oddEven);
+      Charts.renderSumHistogram('chartSum', analysis.sumStats);
+      Charts.renderLastDigitChart('chartLastDigit', analysis.lastDigit);
+    });
+
+    // Period button binding
+    document.querySelectorAll('.period-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.period-btn').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        Charts.destroyAll();
+        var p = btn.dataset.period;
+        renderAnalysis(p === 'all' ? 'all' : parseInt(p));
+      });
+    });
+  }
+
+  function renderHeatmap(frequency) {
+    var maxCount = Math.max.apply(null, Object.values(frequency).map(function(f) { return f.count; }));
+    var html = '<div class="heatmap-grid">';
+    for (var n = 1; n <= 43; n++) {
+      var count = frequency[n] ? frequency[n].count : 0;
+      var intensity = maxCount > 0 ? count / maxCount : 0;
+      var r = Math.round(59 + intensity * 180);
+      var g = Math.round(59 - intensity * 30);
+      var b = Math.round(59 - intensity * 40);
+      var bg = 'rgb(' + r + ',' + g + ',' + b + ')';
+      html += '<div class="heatmap-cell" style="background:' + bg + '" title="番号' + n + ': ' + count + '回">' + String(n).padStart(2, '0') + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  function renderDormancyList(dormancy) {
+    if (!dormancy) return '<li>データなし</li>';
+    return Object.entries(dormancy)
+      .sort(function(a, b) { return b[1] - a[1]; })
+      .slice(0, 10)
+      .map(function(entry) {
+        return '<li><span>' + Utils.renderBall(parseInt(entry[0])) + ' 番号' + entry[0] + '</span><span style="font-family:var(--font-mono);font-weight:700">' + entry[1] + '回不出</span></li>';
+      }).join('');
+  }
+
+  function renderCorrelationList(correlation) {
+    if (!correlation || correlation.length === 0) return '<li>データなし</li>';
+    return correlation.slice(0, 10).map(function(item) {
+      var nums = item.pair.split('-').map(Number);
+      return '<li><span>' + Utils.renderBall(nums[0]) + Utils.renderBall(nums[1]) + '</span><span style="font-family:var(--font-mono);font-weight:700">' + item.count + '回</span></li>';
+    }).join('');
+  }
+
+  function renderTripletList(triplets) {
+    if (!triplets || triplets.length === 0) return '<li>データなし</li>';
+    return triplets.slice(0, 5).map(function(item) {
+      var nums = item.triplet.split('-').map(Number);
+      return '<li><span>' + nums.map(function(n) { return Utils.renderBall(n); }).join('') + '</span><span style="font-family:var(--font-mono);font-weight:700">' + item.count + '回</span></li>';
+    }).join('');
+  }
+
+  function renderWeekdayDiff(wt) {
+    if (!wt.monday.frequency || !wt.thursday.frequency) return '<p style="font-size:0.75rem;color:var(--text-muted)">データ不足</p>';
+    var diffs = [];
+    for (var n = 1; n <= 43; n++) {
+      var mr = wt.monday.frequency[n] ? wt.monday.frequency[n].rate : 0;
+      var tr = wt.thursday.frequency[n] ? wt.thursday.frequency[n].rate : 0;
+      var diff = mr - tr;
+      if (Math.abs(diff) > 0.03) diffs.push({ num: n, diff: diff });
+    }
+    if (diffs.length === 0) return '<p style="font-size:0.75rem;color:var(--text-muted)">目立った差なし</p>';
+    diffs.sort(function(a, b) { return Math.abs(b.diff) - Math.abs(a.diff); });
+    return '<ul class="dormancy-list">' + diffs.slice(0, 8).map(function(d) {
+      var label = d.diff > 0 ? '月曜+' : '木曜+';
+      var color = d.diff > 0 ? 'var(--hot)' : 'var(--cold)';
+      return '<li><span>' + Utils.renderBall(d.num) + '</span><span style="color:' + color + '">' + label + (Math.abs(d.diff) * 100).toFixed(1) + '%</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderIntervalTop(intervalDist) {
+    if (!intervalDist) return '<p style="color:var(--text-muted)">データなし</p>';
+    var items = [];
+    for (var n = 1; n <= 43; n++) {
+      if (intervalDist[n] && intervalDist[n].probNext) {
+        items.push({ num: n, prob: intervalDist[n].probNext, avgInt: intervalDist[n].avgInterval, dormancy: intervalDist[n].dormancy });
+      }
+    }
+    items.sort(function(a, b) { return b.prob - a.prob; });
+    return '<ul class="dormancy-list">' + items.slice(0, 10).map(function(item) {
+      return '<li><span>' + Utils.renderBall(item.num) + ' 番号' + item.num + '</span><span style="font-family:var(--font-mono);font-size:0.75rem">' + (item.prob * 100).toFixed(1) + '% (平均' + (item.avgInt ? item.avgInt.toFixed(1) : '-') + '回間隔)</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function renderHotCold(hotCold) {
+    if (!hotCold) return '<p style="color:var(--text-muted)">データなし</p>';
+    var hot = [], cold = [];
+    for (var n = 1; n <= 43; n++) {
+      if (hotCold[n]) {
+        if (hotCold[n].state === 'hot') hot.push(n);
+        else if (hotCold[n].state === 'cold') cold.push(n);
+      }
+    }
+    return '<div style="margin-bottom:8px"><span class="tag-hot">HOT: </span>' + (hot.length > 0 ? hot.map(function(n) { return Utils.renderBall(n); }).join('') : 'なし') + '</div>' +
+           '<div><span class="tag-cold">COLD: </span>' + (cold.length > 0 ? cold.map(function(n) { return Utils.renderBall(n); }).join('') : 'なし') + '</div>';
+  }
+
+  /* ========== 3. HISTORY TAB ========== */
+  function bindHistoryEvents() {
+    document.getElementById('historySearch').addEventListener('input', function(e) {
+      historyPage = 0;
+      renderHistory(e.target.value.trim());
+    });
+    document.getElementById('btnAddDraw').addEventListener('click', openAddDrawModal);
+    document.getElementById('btnLoadMore').addEventListener('click', function() {
+      historyPage++;
+      appendHistory();
+    });
+    document.getElementById('btnFetchResult').addEventListener('click', tryFetchResult);
+  }
+
+  function renderHistory(searchNum) {
+    var data = Utils.getAllDrawData();
+    var filtered = data;
+    if (searchNum && !isNaN(parseInt(searchNum))) {
+      var num = parseInt(searchNum);
+      filtered = data.filter(function(d) { return d.nums.indexOf(num) >= 0 || d.bonus === num; });
+    }
+
+    // Latest draw
+    var latestEl = document.getElementById('latestDraw');
+    if (data.length > 0) {
+      var d = data[0];
+      latestEl.innerHTML = '<h3>最新: 第' + d.id + '回 ' + Utils.formatDate(d.date) + '（' + Utils.getWeekday(d.date) + '）</h3>' +
+        '<div class="balls-row">' + Utils.renderBalls(d.nums, { clickable: true }) + Utils.renderBall(d.bonus, { bonus: true }) + '</div>';
+    } else {
+      latestEl.innerHTML = '<p style="color:var(--text-muted)">データなし</p>';
+    }
+
+    historyPage = 0;
+    var list = document.getElementById('historyList');
+    var page = filtered.slice(0, HISTORY_PAGE_SIZE);
+    list.innerHTML = page.map(renderDrawRow).join('');
+    document.getElementById('btnLoadMore').style.display = filtered.length > HISTORY_PAGE_SIZE ? 'block' : 'none';
+  }
+
+  function appendHistory() {
+    var data = Utils.getAllDrawData();
+    var search = document.getElementById('historySearch').value.trim();
+    var filtered = data;
+    if (search && !isNaN(parseInt(search))) {
+      var num = parseInt(search);
+      filtered = data.filter(function(d) { return d.nums.indexOf(num) >= 0; });
+    }
+    var start = historyPage * HISTORY_PAGE_SIZE;
+    var page = filtered.slice(start, start + HISTORY_PAGE_SIZE);
+    document.getElementById('historyList').innerHTML += page.map(renderDrawRow).join('');
+    document.getElementById('btnLoadMore').style.display = start + HISTORY_PAGE_SIZE < filtered.length ? 'block' : 'none';
+  }
+
+  function renderDrawRow(d) {
+    return '<div class="draw-row"><span class="draw-id">#' + d.id + '</span><span class="draw-date">' + Utils.formatDate(d.date) + '(' + Utils.getWeekday(d.date) + ')</span><span class="draw-balls">' + d.nums.map(function(n) { return Utils.renderBall(n); }).join('') + Utils.renderBall(d.bonus, { bonus: true }) + '</span></div>';
+  }
+
+  // Auto-fetch result (Improvement 19)
+  function tryFetchResult() {
+    Utils.showToast('結果を取得中...');
+    // Try CORS-friendly endpoint
+    fetch('https://www.mk-mode.com/rails/loto/loto6/latest.json')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.id && data.nums) {
+          Storage.saveUserDraw(data);
+          Verifier.verifyAll();
+          renderHistory();
+          Utils.showToast('最新結果を取得しました');
+        }
+      })
+      .catch(function() {
+        Utils.showToast('自動取得に失敗。手動で追加してください。');
+      });
+  }
+
+  /* --- Add Draw Modal --- */
+  var selectedNums = [];
+  var selectedBonus = null;
+
+  function openAddDrawModal() {
+    var modal = document.getElementById('addDrawModal');
+    var data = Utils.getAllDrawData();
+    var nextId = data.length > 0 ? data[0].id + 1 : 1;
+    document.getElementById('inputDrawId').value = nextId;
+    document.getElementById('inputDrawDate').value = new Date().toISOString().split('T')[0];
+    selectedNums = [];
+    selectedBonus = null;
+    renderNumberGrids();
+    updateSelectedDisplay();
+    document.getElementById('formError').textContent = '';
+    modal.classList.add('active');
+
+    document.getElementById('modalClose').onclick = function() { modal.classList.remove('active'); };
+    document.getElementById('modalCancel').onclick = function() { modal.classList.remove('active'); };
+    document.getElementById('modalSave').onclick = saveNewDraw;
+  }
+
+  function renderNumberGrids() {
+    var grid = document.getElementById('numberGrid');
+    var bonusGrid = document.getElementById('bonusGrid');
+    grid.innerHTML = '';
+    bonusGrid.innerHTML = '';
+    for (var n = 1; n <= 43; n++) {
+      (function(num) {
+        var btn = document.createElement('button');
+        btn.textContent = num;
+        btn.addEventListener('click', function() { toggleNumber(num); });
+        grid.appendChild(btn);
+        var bBtn = document.createElement('button');
+        bBtn.textContent = num;
+        bBtn.addEventListener('click', function() { toggleBonus(num); });
+        bonusGrid.appendChild(bBtn);
+      })(n);
+    }
+  }
+
+  function toggleNumber(n) {
+    var idx = selectedNums.indexOf(n);
+    if (idx >= 0) selectedNums.splice(idx, 1);
+    else if (selectedNums.length < 6) selectedNums.push(n);
+    updateNumberGridUI();
+    updateSelectedDisplay();
+  }
+
+  function toggleBonus(n) {
+    selectedBonus = selectedBonus === n ? null : n;
+    updateNumberGridUI();
+    updateSelectedDisplay();
+  }
+
+  function updateNumberGridUI() {
+    document.querySelectorAll('#numberGrid button').forEach(function(btn, i) {
+      var n = i + 1;
+      btn.classList.toggle('selected', selectedNums.indexOf(n) >= 0);
+      btn.classList.toggle('disabled-num', selectedNums.length >= 6 && selectedNums.indexOf(n) < 0);
+    });
+    document.querySelectorAll('#bonusGrid button').forEach(function(btn, i) {
+      var n = i + 1;
+      btn.classList.toggle('selected', selectedBonus === n);
+    });
+  }
+
+  function updateSelectedDisplay() {
+    var sorted = selectedNums.slice().sort(function(a, b) { return a - b; });
+    document.getElementById('selectedNums').textContent = selectedNums.length > 0 ? '選択: ' + sorted.join(', ') + ' (' + selectedNums.length + '/6)' : '選択: なし';
+    document.getElementById('selectedBonus').textContent = selectedBonus ? '選択: ' + selectedBonus : '選択: なし';
+  }
+
+  function saveNewDraw() {
+    var id = parseInt(document.getElementById('inputDrawId').value);
+    var date = document.getElementById('inputDrawDate').value;
+    var errEl = document.getElementById('formError');
+    if (!id || id < 1) { errEl.textContent = '回号を入力してください'; return; }
+    if (!date) { errEl.textContent = '日付を入力してください'; return; }
+    if (selectedNums.length !== 6) { errEl.textContent = '本数字を6個選択してください'; return; }
+    if (selectedBonus === null) { errEl.textContent = 'ボーナス数字を選択してください'; return; }
+    if (selectedNums.indexOf(selectedBonus) >= 0) { errEl.textContent = 'ボーナス数字は本数字と異なる必要があります'; return; }
+
+    var draw = {
+      id: id,
+      date: date,
+      nums: selectedNums.slice().sort(function(a, b) { return a - b; }),
+      bonus: selectedBonus,
+    };
+    Storage.saveUserDraw(draw);
+    var verified = Verifier.verifyAll();
+    document.getElementById('addDrawModal').classList.remove('active');
+    renderHistory();
+    renderHeader();
+    if (verified > 0) Utils.showToast(verified + '件の予想を自動検証しました');
+    else Utils.showToast('結果を保存しました');
+  }
+
+  /* ========== 4. RECORDS TAB ========== */
+  function bindRecordsEvents() {
+    document.getElementById('recordsFilter').addEventListener('change', renderRecords);
+    document.getElementById('recordsSort').addEventListener('change', renderRecords);
+  }
+
+  function renderRecords() {
+    var predictions = Storage.getPredictions();
+    var verifications = Storage.getVerifications();
+    var verMap = {};
+    verifications.forEach(function(v) { verMap[v.targetDrawId] = v; });
+
+    // Summary
+    var summaryEl = document.getElementById('recordsSummary');
+    var totalPreds = predictions.length;
+    var totalMatch = 0, matchCount = 0;
+    verifications.forEach(function(v) { v.results.forEach(function(r) { totalMatch += r.matchCount; matchCount++; }); });
+    var avgMatch = matchCount > 0 ? (totalMatch / matchCount).toFixed(1) : '-';
+
+    summaryEl.innerHTML =
+      '<div class="stat-card"><div class="stat-value">' + totalPreds + '</div><div class="stat-label">総予測回数</div></div>' +
+      '<div class="stat-card"><div class="stat-value">' + avgMatch + '</div><div class="stat-label">平均一致数</div></div>';
+
+    var listEl = document.getElementById('recordsList');
+    if (predictions.length === 0) {
+      listEl.innerHTML = '<div class="no-records"><p>まだ予測がありません。</p><button class="btn btn-secondary btn-sm" onclick="App.switchTab(\'tabPredict\')">予想タブへ</button></div>';
+      return;
+    }
+
+    var filter = document.getElementById('recordsFilter').value;
+    var sort = document.getElementById('recordsSort').value;
+    var filtered = predictions.slice();
+    if (filter === 'verified') filtered = filtered.filter(function(p) { return p.verified; });
+    if (filter === 'unverified') filtered = filtered.filter(function(p) { return !p.verified; });
+    if (sort === 'oldest') filtered.reverse();
+    if (sort === 'bestmatch') {
+      filtered.sort(function(a, b) {
+        var va = verMap[a.targetDrawId];
+        var vb = verMap[b.targetDrawId];
+        var ma = va ? Math.max.apply(null, va.results.map(function(r) { return r.matchCount; })) : -1;
+        var mb = vb ? Math.max.apply(null, vb.results.map(function(r) { return r.matchCount; })) : -1;
+        return mb - ma;
+      });
+    }
+
+    listEl.innerHTML = filtered.map(function(pred, idx) {
+      var ver = verMap[pred.targetDrawId];
+      var statusBadge, statusClass;
+      if (ver) { statusBadge = '検証済み'; statusClass = 'badge-verified'; }
+      else { statusBadge = '未検証'; statusClass = 'badge-unverified'; }
+
+      var setsHtml = pred.sets.map(function(set) {
+        var name = Predictor.STRATEGY_NAMES[set.strategy] || set.strategy;
+        var verResult = ver ? ver.results.find(function(r) { return r.strategy === set.strategy; }) : null;
+        var matchHtml = '';
+        if (verResult) {
+          matchHtml = '<span class="record-match-info">' + verResult.matchCount + '個一致' + (verResult.bonusMatch ? '+B' : '') + ' <span class="prize-badge ' + Utils.prizeClass(verResult.prize) + '">' + verResult.prize + '</span></span>';
+        }
+        var matchedSet = verResult ? verResult.matched : [];
+        var balls = set.nums.map(function(n) { return Utils.renderBall(n, { matched: matchedSet.indexOf(n) >= 0 }); }).join('');
+        return '<div class="record-strategy-row"><span class="record-strategy-name">' + name + '</span>' + balls + matchHtml + '</div>';
+      }).join('');
+
+      var numsText = pred.sets.map(function(s, i) {
+        var name = Predictor.STRATEGY_NAMES[s.strategy] || s.strategy;
+        return ['①','②','③','④','⑤'][i] + ' ' + name + ': ' + s.nums.map(function(n) { return String(n).padStart(2, '0'); }).join(' ');
+      }).join('\n');
+
+      var footerHtml = '';
+      if (ver) {
+        footerHtml = '<div class="record-footer">当選番号: ' + Utils.renderBalls(ver.actualNums) + ' ' + Utils.renderBall(ver.actualBonus, { bonus: true }) + '</div>';
+      }
+
+      return '<div class="record-card" style="animation-delay:' + (idx * 0.03) + 's">' +
+        '<div class="record-card-header"><div><div class="record-draw-info">第' + pred.targetDrawId + '回 ' + Utils.formatDate(pred.targetDate) + '（' + pred.targetWeekday + '）</div><div class="record-created">生成: ' + Utils.formatDateTime(pred.createdAt) + '</div></div><span class="verification-badge ' + statusClass + '">' + statusBadge + '</span></div>' +
+        '<div class="record-strategies">' + setsHtml + '</div>' +
+        Utils.renderCopyableTextarea(numsText, 'record_ta_' + idx) +
+        footerHtml + '</div>';
+    }).join('');
+  }
+
+  /* ========== 5. VERIFY TAB ========== */
+  function bindVerifyEvents() {
+    document.getElementById('btnVerify').addEventListener('click', function() {
+      var count = Verifier.verifyAll();
+      if (count > 0) Utils.showToast(count + '件を検証しました');
+      else Utils.showToast('検証対象なし');
+      renderVerify();
+    });
+  }
+
+  function renderVerify() {
+    var verifications = Storage.getVerifications();
+    var stats = Verifier.getStats();
+    var learningStatus = Learner.getStatus();
+
+    // Latest verification
+    var latestEl = document.getElementById('latestVerification');
+    if (verifications.length > 0) {
+      var v = verifications[0];
+      var html = '<div class="card"><h3>最新検証: 第' + v.targetDrawId + '回 (' + Utils.formatDate(v.drawDate) + ')</h3>';
+      html += '<div style="margin-bottom:8px">当選番号: ' + Utils.renderBalls(v.actualNums) + ' ' + Utils.renderBall(v.actualBonus, { bonus: true }) + '</div>';
+      v.results.forEach(function(r) {
+        var name = Predictor.STRATEGY_NAMES[r.strategy] || r.strategy;
+        html += '<div class="verification-result-card"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">' + name + '</span><span class="prize-badge ' + Utils.prizeClass(r.prize) + '">' + r.prize + '</span></div>';
+        html += '<div style="margin:4px 0"><span class="match-count">' + r.matchCount + '</span><span style="font-size:0.8rem">個一致' + (r.bonusMatch ? ' +B' : '') + '</span></div>';
+        if (r.matched.length > 0) html += '<div style="font-size:0.7rem;color:var(--text-muted)">一致: ' + r.matched.join(', ') + '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
+      latestEl.innerHTML = html;
+    } else {
+      latestEl.innerHTML = '<div class="card"><h3>検証結果</h3><p style="color:var(--text-muted)">まだ検証がありません</p></div>';
+    }
+
+    // Stats
+    var statsEl = document.getElementById('verificationStats');
+    if (stats.total > 0) {
+      statsEl.innerHTML =
+        '<div class="stats-grid">' +
+        '<div class="stat-card"><div class="stat-value">' + stats.total + '</div><div class="stat-label">検証回数</div></div>' +
+        '<div class="stat-card"><div class="stat-value">' + stats.avgMatch + '</div><div class="stat-label">平均一致</div></div>' +
+        '<div class="stat-card"><div class="stat-value">' + stats.maxMatch + '</div><div class="stat-label">最高一致</div></div>' +
+        '<div class="stat-card"><div class="stat-value">' + (stats.prizeCount['5等'] || 0) + '</div><div class="stat-label">5等以上</div></div>' +
+        '</div>' +
+        '<div class="card"><h3>戦略別成績</h3><div class="chart-container" style="height:200px"><canvas id="chartStrategy"></canvas></div></div>';
+
+      requestAnimationFrame(function() {
+        Charts.renderStrategyChart('chartStrategy', stats.strategyStats);
+      });
+    } else {
+      statsEl.innerHTML = '';
+    }
+
+    // Accuracy trend (Improvement 18)
+    var trendSection = document.getElementById('accuracyTrendSection');
+    var trendData = Verifier.getAccuracyTrend();
+    if (trendData.length >= 2) {
+      trendSection.innerHTML = '<div class="card"><h3>予測的中率の推移</h3><div class="chart-container" style="height:200px"><canvas id="chartAccTrend"></canvas></div></div>';
+      requestAnimationFrame(function() {
+        Charts.renderAccuracyTrend('chartAccTrend', trendData);
+      });
+    } else {
+      trendSection.innerHTML = '';
+    }
+
+    // Learning status
+    renderLearningStatus(learningStatus);
+  }
+
+  function renderLearningStatus(status) {
+    var el = document.getElementById('learningStatus');
+    var weights = status.currentWeights;
+    var prev = status.previousWeights;
+
+    var barsHtml = '';
+    var keys = Object.keys(Storage.WEIGHT_LABELS);
+    keys.forEach(function(key) {
+      var label = Storage.WEIGHT_LABELS[key];
+      var val = ((weights[key] || 0) * 100).toFixed(1);
+      var changeHtml = '';
+      if (prev) {
+        var diff = (weights[key] || 0) - (prev[key] || 0);
+        if (Math.abs(diff) > 0.001) {
+          var cls = diff > 0 ? 'positive' : 'negative';
+          changeHtml = '<span class="weight-change ' + cls + '">' + (diff > 0 ? '+' : '') + (diff * 100).toFixed(1) + '%</span>';
+        }
+      }
+      barsHtml += '<div class="weight-bar"><span class="weight-bar-label">' + label + '</span><div class="weight-bar-track"><div class="weight-bar-fill" style="width:' + val + '%">' + val + '%</div></div>' + changeHtml + '</div>';
+    });
+
+    var historyHtml = status.recentHistory.slice(0, 5).map(function(h) {
+      var stratName = Predictor.STRATEGY_NAMES[h.bestStrategy] || h.bestStrategy;
+      return '<div class="learning-history-item">' + Utils.formatDateTime(h.learnedAt) + ' 第' + h.triggerDrawId + '回（最優秀: ' + stratName + '）</div>';
+    }).join('');
+
+    el.innerHTML = '<h3>学習状態</h3>' + barsHtml +
+      '<div style="font-size:0.75rem;color:var(--text-muted);margin-top:8px">学習回数: ' + status.learningCount + '回 / サンプル: ' + status.totalSamples + '</div>' +
+      (historyHtml ? '<div class="learning-history"><strong>学習履歴:</strong>' + historyHtml + '</div>' : '') +
+      '<button class="btn btn-sm btn-secondary" id="btnResetLearn" style="margin-top:8px">学習をリセット</button>';
+
+    var resetBtn = document.getElementById('btnResetLearn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function() {
+        if (confirm('学習をリセットしますか？')) {
+          Learner.resetWeights();
+          renderVerify();
+          if (currentTab === 'tabSettings') renderSettings();
+        }
+      });
+    }
+  }
+
+  /* ========== 6. BACKTEST TAB ========== */
+  function bindBacktestEvents() {
+    document.getElementById('btnBacktest50').addEventListener('click', function() { runBacktest(50); });
+    document.getElementById('btnBacktest100').addEventListener('click', function() { runBacktest(100); });
+  }
+
+  function runBacktest(n) {
+    var data = Utils.getAllDrawData();
+    if (data.length < 30) { alert('バックテストにはデータが不足しています（最低30回分必要）。'); return; }
+
+    var overlay = document.getElementById('loadingOverlay');
+    var loadText = document.getElementById('loadingText');
+    overlay.classList.add('active');
+    loadText.textContent = 'バックテスト実行中... (' + n + '回分)';
+
+    setTimeout(function() {
+      try {
+        var weights = Storage.getWeights();
+        Backtest.run(data, weights, n);
+      } catch (e) {
+        console.error(e);
+        alert('バックテスト中にエラーが発生しました。');
+      }
+      overlay.classList.remove('active');
+      renderBacktest();
+    }, 100);
+  }
+
+  function renderBacktest() {
+    var saved = Storage.getBacktestResults();
+    if (!saved) {
+      document.getElementById('backtestSummary').innerHTML = '';
+      document.getElementById('backtestChart').style.display = 'none';
+      document.getElementById('backtestDetails').innerHTML = '';
+      return;
+    }
+
+    var summary = saved.summary;
+    var results = saved.results;
+
+    // Summary
+    var summaryEl = document.getElementById('backtestSummary');
+    summaryEl.innerHTML = '<div class="backtest-summary">' +
+      '<div class="stat-card"><div class="stat-value">' + summary.totalDraws + '</div><div class="stat-label">テスト回数</div></div>' +
+      '<div class="stat-card"><div class="stat-value">' + summary.avgMatch + '</div><div class="stat-label">平均一致</div></div>' +
+      '<div class="stat-card"><div class="stat-value">' + summary.maxMatch + '</div><div class="stat-label">最高一致</div></div>' +
+      '</div>' +
+      '<div class="card"><h3>等級分布</h3>' +
+      Object.entries(summary.prizeCount).map(function(entry) {
+        return '<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:0.8rem"><span>' + entry[0] + '</span><span style="font-weight:700">' + entry[1] + '回</span></div>';
+      }).join('') +
+      '<div style="font-size:0.65rem;color:var(--text-muted);margin-top:4px">実行: ' + Utils.formatDateTime(summary.runAt) + '</div></div>';
+
+    // Chart
+    if (results.length > 0) {
+      document.getElementById('backtestChart').style.display = 'block';
+      requestAnimationFrame(function() {
+        Charts.renderBacktestChart('chartBacktest', results);
+      });
+    }
+
+    // Details (first 20)
+    var detailsEl = document.getElementById('backtestDetails');
+    detailsEl.innerHTML = '<div class="card"><h3>詳細結果</h3>' +
+      results.slice(0, 20).map(function(r) {
+        return '<div class="draw-row"><span class="draw-id">#' + r.drawId + '</span><span class="draw-date">' + Utils.formatDate(r.date) + '</span><span style="font-family:var(--font-mono);font-weight:700;color:' + (r.bestMatchCount >= 3 ? 'var(--success)' : 'var(--text-muted)') + '">' + r.bestMatchCount + '個一致</span><span class="prize-badge ' + Utils.prizeClass(r.bestPrize) + '">' + r.bestPrize + '</span></div>';
+      }).join('') +
+      '</div>';
+  }
+
+  /* ========== 7. SETTINGS TAB ========== */
+  function bindSettingsEvents() {
+    document.querySelectorAll('.theme-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var settings = Storage.getSettings();
+        settings.theme = btn.dataset.theme;
+        Storage.saveSettings(settings);
+        applyTheme();
+      });
+    });
+
+    document.getElementById('toggleAutoLearn').addEventListener('change', function(e) {
+      var settings = Storage.getSettings();
+      settings.autoLearn = e.target.checked;
+      Storage.saveSettings(settings);
+    });
+
+    document.getElementById('btnApplyLearned').addEventListener('click', function() {
+      Utils.showToast('学習済みの値が適用されています');
+    });
+
+    document.getElementById('btnResetWeights').addEventListener('click', function() {
+      if (confirm('重みをデフォルトに戻しますか？')) {
+        Storage.saveWeights(JSON.parse(JSON.stringify(Storage.DEFAULT_WEIGHTS)));
+        renderSettings();
+        Utils.showToast('重みをリセットしました');
+      }
+    });
+
+    document.getElementById('btnExport').addEventListener('click', function() {
+      var data = Storage.exportAll();
+      var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = 'loto6_backup_' + new Date().toISOString().split('T')[0] + '.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('btnImport').addEventListener('click', function() {
+      document.getElementById('fileImport').click();
+    });
+
+    document.getElementById('fileImport').addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function() {
+        try {
+          var data = JSON.parse(reader.result);
+          Storage.importAll(data);
+          Utils.showToast('インポート完了');
+          location.reload();
+        } catch (err) {
+          alert('無効なファイルです。');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById('btnResetData').addEventListener('click', function() {
+      if (confirm('すべてのデータをリセットしますか？この操作は取り消せません。')) {
+        Storage.resetAll();
+        location.reload();
+      }
+    });
+
+    // QR Code (Improvement 20)
+    document.getElementById('btnShowQR').addEventListener('click', function() {
+      generateQR();
+    });
+  }
+
+  function renderSettings() {
+    var settings = Storage.getSettings();
+    var weights = settings.weights;
+
+    // Theme
+    document.querySelectorAll('.theme-btn').forEach(function(btn) {
+      btn.classList.toggle('active', btn.dataset.theme === settings.theme);
+    });
+
+    // Auto-learn
+    document.getElementById('toggleAutoLearn').checked = settings.autoLearn;
+
+    // Weight sliders (W1-W12)
+    var slidersEl = document.getElementById('weightsSliders');
+    var keys = Object.keys(Storage.WEIGHT_LABELS);
+
+    slidersEl.innerHTML = keys.map(function(key) {
+      var label = Storage.WEIGHT_LABELS[key];
+      var val = Math.round((weights[key] || 0) * 100);
+      return '<div class="weight-slider-row"><div class="weight-slider-label"><span>' + key + ': ' + label + '</span><span id="wv_' + key + '">' + val + '%</span></div><input type="range" min="3" max="25" value="' + val + '" data-key="' + key + '" oninput="document.getElementById(\'wv_' + key + '\').textContent=this.value+\'%\'"></div>';
+    }).join('');
+
+    slidersEl.querySelectorAll('input[type="range"]').forEach(function(slider) {
+      slider.addEventListener('change', function() {
+        var newWeights = {};
+        slidersEl.querySelectorAll('input[type="range"]').forEach(function(s) {
+          newWeights[s.dataset.key] = parseInt(s.value) / 100;
+        });
+        // Normalize to 1.0
+        var total = Object.values(newWeights).reduce(function(s, v) { return s + v; }, 0);
+        for (var k in newWeights) newWeights[k] = parseFloat((newWeights[k] / total).toFixed(4));
+        Storage.saveWeights(newWeights);
+        renderSettings();
+      });
+    });
+
+    // Weights chart
+    requestAnimationFrame(function() {
+      Charts.renderWeightsChart('chartWeights', weights);
+    });
+
+    // Data info
+    var data = Utils.getAllDrawData();
+    var sizeKB = (Storage.getStorageSize() / 1024).toFixed(1);
+    document.getElementById('dataInfo').textContent = '保存データ量: ' + sizeKB + ' KB';
+    document.getElementById('dataRange').textContent = data.length > 0 ?
+      '内蔵データ: 第' + data[data.length - 1].id + '回〜第' + data[0].id + '回 (' + data.length + '件)' : 'データなし';
+  }
+
+  function generateQR() {
+    var container = document.getElementById('qrDisplay');
+    var data = Storage.exportAll();
+    var json = JSON.stringify(data);
+
+    // QR codes have size limits, compress
+    if (json.length > 4000) {
+      // For large data, only export recent predictions and settings
+      var compact = {
+        settings: data.settings,
+        predictions: (data.predictions || []).slice(0, 5),
+        verifications: (data.verifications || []).slice(0, 5),
+        learningHistory: (data.learningHistory || []).slice(0, 3),
+        _version: 'v3-compact',
+      };
+      json = JSON.stringify(compact);
+    }
+
+    container.innerHTML = '<div class="qr-container"><div id="qrCanvas"></div></div><p style="font-size:0.65rem;color:var(--text-muted);text-align:center;margin-top:4px">データサイズ: ' + (json.length / 1024).toFixed(1) + ' KB</p>';
+
+    if (typeof QRCode !== 'undefined') {
+      try {
+        new QRCode(document.getElementById('qrCanvas'), {
+          text: json,
+          width: 256,
+          height: 256,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.L,
+        });
+      } catch (e) {
+        container.innerHTML = '<p style="color:var(--danger);font-size:0.75rem">QRコード生成に失敗しました（データが大きすぎる可能性があります）</p>';
+      }
+    } else {
+      container.innerHTML = '<p style="color:var(--text-muted);font-size:0.75rem">QRCodeライブラリが読み込めませんでした</p>';
+    }
+  }
+
+  /* ---------- Ball Detail Popup (Improvement 12) ---------- */
+  function showBallDetail(num) {
+    var data = Utils.getAllDrawData();
+    var analysis = Analyzer.fullAnalysis(data);
+    var freq = analysis.frequency[num] || { count: 0, rate: 0 };
+    var dormancy = analysis.dormancy[num] || 0;
+    var hotCold = analysis.hotCold[num] || { state: 'normal', recentRate: 0 };
+    var interval = analysis.intervalDist[num] || { avgInterval: null, probNext: 0 };
+
+    // Find last appearance date
+    var lastDate = '-';
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].nums.indexOf(num) >= 0) {
+        lastDate = Utils.formatDate(data[i].date);
+        break;
+      }
+    }
+
+    var stateLabel = hotCold.state === 'hot' ? '<span class="tag-hot">HOT</span>' : hotCold.state === 'cold' ? '<span class="tag-cold">COLD</span>' : '<span class="tag-normal">NORMAL</span>';
+
+    var popup = document.getElementById('ballDetailPopup');
+    var content = document.getElementById('ballDetailContent');
+    content.innerHTML =
+      '<div style="margin-bottom:12px">' + Utils.renderBall(num) + '</div>' +
+      '<div style="font-size:1rem;font-weight:700;margin-bottom:12px">番号 ' + num + ' ' + stateLabel + '</div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">出現回数</span><span class="popup-stat-value">' + freq.count + '回 (' + (freq.rate * 100).toFixed(1) + '%)</span></div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">出遅れ</span><span class="popup-stat-value">' + dormancy + '回不出</span></div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">前回出現</span><span class="popup-stat-value">' + lastDate + '</span></div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">平均間隔</span><span class="popup-stat-value">' + (interval.avgInterval ? interval.avgInterval.toFixed(1) + '回' : '-') + '</span></div>' +
+      '<div class="popup-stat"><span class="popup-stat-label">次回出現確率</span><span class="popup-stat-value">' + (interval.probNext * 100).toFixed(1) + '%</span></div>' +
+      '<button class="btn btn-sm btn-secondary" style="margin-top:12px;width:100%" onclick="document.getElementById(\'ballDetailPopup\').classList.remove(\'active\')">閉じる</button>';
+    popup.classList.add('active');
+    popup.onclick = function(e) { if (e.target === popup) popup.classList.remove('active'); };
+  }
+
+  /* ---------- Pull-to-refresh (Improvement 11) ---------- */
+  function initPullToRefresh() {
+    var startY = 0;
+    var pulling = false;
+
+    document.addEventListener('touchstart', function(e) {
+      if (window.scrollY === 0) {
+        startY = e.touches[0].pageY;
+        pulling = true;
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchmove', function(e) {
+      if (!pulling) return;
+      var diff = e.touches[0].pageY - startY;
+      if (diff > 80 && window.scrollY === 0) {
+        pulling = false;
+        Utils.hapticFeedback();
+        renderCurrentTab();
+        Utils.showToast('更新しました');
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchend', function() { pulling = false; }, { passive: true });
+  }
+
+  /* ---------- Start ---------- */
+  document.addEventListener('DOMContentLoaded', init);
+
+  return { switchTab: switchTab, showBallDetail: showBallDetail };
+})();
+
+  </script>
+</body>
+</html>
