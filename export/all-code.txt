@@ -1,715 +1,10 @@
-================================================================
-  Loto6 AI Predictor v2.0 - 全コード一覧
-  エクスポート日時: 2026-03-19
-================================================================
-
-================================================================
-  FILE 1: js/analyzer.js
-================================================================
-/* ===== Statistical Analysis Engine (v2.0 - Enhanced) ===== */
-
-const Analyzer = (() => {
-  const NUM_RANGE = Array.from({length: 43}, (_, i) => i + 1);
-
-  function _slice(data, lastN) {
-    if (!lastN || lastN === 'all' || lastN >= data.length) return data;
-    return data.slice(0, lastN);
-  }
-
-  function calcFrequency(data, lastN) {
-    const d = _slice(data, lastN);
-    const counts = {};
-    NUM_RANGE.forEach(n => counts[n] = 0);
-    d.forEach(draw => draw.nums.forEach(n => counts[n]++));
-    const total = d.length;
-    const result = {};
-    NUM_RANGE.forEach(n => {
-      result[n] = {
-        count: counts[n],
-        rate: total > 0 ? counts[n] / total : 0,
-      };
-    });
-    return result;
-  }
-
-  function calcOddEven(data) {
-    const patterns = {};
-    data.forEach(draw => {
-      const odd = draw.nums.filter(n => n % 2 === 1).length;
-      const key = `${odd}:${6 - odd}`;
-      patterns[key] = (patterns[key] || 0) + 1;
-    });
-    return patterns;
-  }
-
-  function calcRangeDistribution(data) {
-    const ranges = {'1-9': 0, '10-19': 0, '20-29': 0, '30-39': 0, '40-43': 0};
-    let total = 0;
-    data.forEach(draw => draw.nums.forEach(n => {
-      total++;
-      if (n <= 9) ranges['1-9']++;
-      else if (n <= 19) ranges['10-19']++;
-      else if (n <= 29) ranges['20-29']++;
-      else if (n <= 39) ranges['30-39']++;
-      else ranges['40-43']++;
-    }));
-    const result = {};
-    for (const [k, v] of Object.entries(ranges)) {
-      result[k] = { count: v, rate: total > 0 ? v / total : 0 };
-    }
-    return result;
-  }
-
-  function calcSumStats(data) {
-    if (!data.length) return {};
-    const sums = data.map(d => d.nums.reduce((a, b) => a + b, 0));
-    const sorted = [...sums].sort((a, b) => a - b);
-    const n = sorted.length;
-    const mean = sums.reduce((a, b) => a + b, 0) / n;
-    const median = n % 2 === 1 ? sorted[Math.floor(n/2)] : (sorted[n/2-1] + sorted[n/2]) / 2;
-    const variance = sums.reduce((acc, s) => acc + (s - mean) ** 2, 0) / n;
-    const std = Math.sqrt(variance);
-    return {
-      mean: Math.round(mean * 100) / 100,
-      median, std: Math.round(std * 100) / 100,
-      min: sorted[0], max: sorted[n-1],
-      q1: sorted[Math.floor(n/4)],
-      q3: sorted[Math.floor(3*n/4)],
-      distribution: _buildHistogram(sums),
-    };
-  }
-
-  function _buildHistogram(values) {
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const bucketSize = 10;
-    const start = Math.floor(min / bucketSize) * bucketSize;
-    const end = Math.ceil((max+1) / bucketSize) * bucketSize;
-    const buckets = {};
-    for (let i = start; i < end; i += bucketSize) {
-      buckets[`${i}-${i+bucketSize-1}`] = 0;
-    }
-    values.forEach(v => {
-      const key = `${Math.floor(v / bucketSize) * bucketSize}-${Math.floor(v / bucketSize) * bucketSize + bucketSize - 1}`;
-      if (buckets[key] !== undefined) buckets[key]++;
-    });
-    return buckets;
-  }
-
-  function calcConsecutive(data) {
-    let count = 0;
-    const pairs = {};
-    data.forEach(draw => {
-      const nums = [...draw.nums].sort((a,b) => a-b);
-      let hasConsec = false;
-      for (let i = 0; i < nums.length - 1; i++) {
-        if (nums[i+1] - nums[i] === 1) {
-          hasConsec = true;
-          const key = `${nums[i]}-${nums[i+1]}`;
-          pairs[key] = (pairs[key] || 0) + 1;
-        }
-      }
-      if (hasConsec) count++;
-    });
-    return { count, total: data.length, rate: data.length > 0 ? count / data.length : 0, pairs };
-  }
-
-  function calcDormancy(data) {
-    if (!data.length) return {};
-    const latestId = data[0].id;
-    const lastSeen = {};
-    for (let i = data.length - 1; i >= 0; i--) {
-      data[i].nums.forEach(n => lastSeen[n] = data[i].id);
-    }
-    const result = {};
-    NUM_RANGE.forEach(n => {
-      result[n] = lastSeen[n] ? latestId - lastSeen[n] : latestId;
-    });
-    return result;
-  }
-
-  function calcCorrelation(data, topN = 20) {
-    const pairs = {};
-    data.forEach(draw => {
-      const nums = [...draw.nums].sort((a,b) => a-b);
-      for (let i = 0; i < nums.length; i++) {
-        for (let j = i + 1; j < nums.length; j++) {
-          const key = `${nums[i]}-${nums[j]}`;
-          pairs[key] = (pairs[key] || 0) + 1;
-        }
-      }
-    });
-    return Object.entries(pairs)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, topN)
-      .map(([pair, count]) => ({ pair, count }));
-  }
-
-  function calcWeekdayTrend(data) {
-    const mon = data.filter(d => new Date(d.date + 'T00:00:00').getDay() === 1);
-    const thu = data.filter(d => new Date(d.date + 'T00:00:00').getDay() === 4);
-    return {
-      monday: { count: mon.length, frequency: calcFrequency(mon) },
-      thursday: { count: thu.length, frequency: calcFrequency(thu) },
-    };
-  }
-
-  function calcMovingAvg(data, window = 20) {
-    if (data.length < window) return {};
-    const recent = data.slice(0, window);
-    const allFreq = calcFrequency(data);
-    const recentFreq = calcFrequency(recent);
-    const result = {};
-    NUM_RANGE.forEach(n => {
-      const allRate = allFreq[n].rate;
-      const recentRate = recentFreq[n].rate;
-      const slope = recentRate - allRate;
-      result[n] = {
-        allRate: Math.round(allRate * 10000) / 10000,
-        recentRate: Math.round(recentRate * 10000) / 10000,
-        slope: Math.round(slope * 10000) / 10000,
-        trending: slope > 0.02 ? 'up' : (slope < -0.02 ? 'down' : 'stable'),
-      };
-    });
-    return result;
-  }
-
-  // NEW: Gap analysis
-  function calcGapStats(data) {
-    const allGaps = [];
-    let consecDraws = 0;
-    let tripleConsecDraws = 0;
-    data.forEach(draw => {
-      const nums = [...draw.nums].sort((a,b) => a-b);
-      const gaps = nums.slice(1).map((n,i) => n - nums[i]);
-      allGaps.push(...gaps);
-      let hasConsec = false, hasTriple = false;
-      for (let i = 0; i < gaps.length; i++) {
-        if (gaps[i] === 1) {
-          hasConsec = true;
-          if (i < gaps.length-1 && gaps[i+1] === 1) hasTriple = true;
-        }
-      }
-      if (hasConsec) consecDraws++;
-      if (hasTriple) tripleConsecDraws++;
-    });
-    const gapMean = allGaps.reduce((a,b)=>a+b,0)/allGaps.length;
-    const gapStd = Math.sqrt(allGaps.reduce((a,v)=>a+(v-gapMean)**2,0)/allGaps.length);
-    return { gapMean, gapStd, consecRate: consecDraws/data.length, tripleConsecRate: tripleConsecDraws/data.length, allGaps };
-  }
-
-  // NEW: 5-zone distribution
-  function calcZoneDistribution(data) {
-    const patterns = {};
-    data.forEach(draw => {
-      const z = [0,0,0,0,0];
-      draw.nums.forEach(n => {
-        if (n<=9) z[0]++; else if (n<=18) z[1]++; else if (n<=27) z[2]++;
-        else if (n<=36) z[3]++; else z[4]++;
-      });
-      const key = z.join('-');
-      patterns[key] = (patterns[key]||0) + 1;
-    });
-    return Object.entries(patterns).sort((a,b)=>b[1]-a[1]).slice(0,10);
-  }
-
-  // NEW: Last digit distribution
-  function calcLastDigitStats(data) {
-    const digitCounts = new Array(10).fill(0);
-    data.forEach(draw => draw.nums.forEach(n => digitCounts[n%10]++));
-    return digitCounts;
-  }
-
-  // NEW: Carryover analysis
-  function calcCarryoverStats(data) {
-    const distribution = new Array(7).fill(0);
-    let bonusCount = 0;
-    for (let i = 1; i < data.length; i++) {
-      const prev = new Set(data[i-1].nums);
-      const carry = data[i].nums.filter(n => prev.has(n)).length;
-      distribution[carry]++;
-      if (data[i].nums.includes(data[i-1].bonus)) bonusCount++;
-    }
-    return { distribution, bonusAppearRate: data.length > 1 ? bonusCount/(data.length-1) : 0 };
-  }
-
-  function fullAnalysis(data, lastN) {
-    const d = _slice(data, lastN);
-    return {
-      totalDraws: d.length,
-      frequency: calcFrequency(d),
-      oddEven: calcOddEven(d),
-      rangeDist: calcRangeDistribution(d),
-      sumStats: calcSumStats(d),
-      consecutive: calcConsecutive(d),
-      dormancy: calcDormancy(d),
-      correlation: calcCorrelation(d),
-      weekdayTrend: calcWeekdayTrend(d),
-      movingAvg: calcMovingAvg(d),
-      gapStats: calcGapStats(d),
-      zoneDistribution: calcZoneDistribution(d),
-      lastDigitStats: calcLastDigitStats(d),
-      carryoverStats: calcCarryoverStats(d),
-    };
-  }
-
-  return {
-    calcFrequency, calcOddEven, calcRangeDistribution, calcSumStats,
-    calcConsecutive, calcDormancy, calcCorrelation, calcWeekdayTrend,
-    calcMovingAvg, calcGapStats, calcZoneDistribution, calcLastDigitStats,
-    calcCarryoverStats, fullAnalysis,
-  };
-})();
-
-================================================================
-  FILE 2: js/predictor.js
-================================================================
-/* ===== Prediction Engine (5 Strategies - v2.0 Enhanced) ===== */
-
-const Predictor = (() => {
-  const NUM_RANGE = Array.from({length: 43}, (_, i) => i + 1);
-
-  const STRATEGY_NAMES = {
-    hot: 'ホット頻度',
-    cold: '逆張り回帰',
-    overdue: 'マルコフ連鎖',
-    balanced: '数論バランス',
-    composite: 'アンサンブルAI',
-  };
-
-  // Monte Carlo scoring function
-  function _scoreCombination(combo, data) {
-    let score = 0;
-    const sorted = [...combo].sort((a,b)=>a-b);
-    const sum = sorted.reduce((a,b)=>a+b,0);
-    const sumStats = Analyzer.calcSumStats(data);
-    const gapStats = Analyzer.calcGapStats(data);
-
-    // Sum proximity to mean
-    const sumDev = Math.abs(sum - (sumStats.mean||132)) / (sumStats.std||30);
-    if (sumDev <= 1) score += 10 * (1 - sumDev);
-
-    // Gap analysis
-    const gaps = sorted.slice(1).map((n,i) => n - sorted[i]);
-    const myGapMean = gaps.reduce((a,b)=>a+b,0)/gaps.length;
-    const gapDiff = Math.abs(myGapMean - gapStats.gapMean) / gapStats.gapStd;
-    score += Math.max(0, 5 - gapDiff * 2);
-
-    // Consecutive pattern
-    const hasConsec = gaps.some(g=>g===1);
-    if (gapStats.consecRate > 0.4 && hasConsec) score += 3;
-    if (gapStats.consecRate <= 0.4 && !hasConsec) score += 2;
-
-    // 5-zone balance
-    const zones = [0,0,0,0,0];
-    for (const n of sorted) {
-      if (n<=9) zones[0]++; else if (n<=18) zones[1]++; else if (n<=27) zones[2]++;
-      else if (n<=36) zones[3]++; else zones[4]++;
-    }
-    score += zones.filter(z=>z>0).length * 1.5;
-
-    // Odd/Even
-    const odd = sorted.filter(n=>n%2===1).length;
-    if (odd >= 2 && odd <= 4) score += 3;
-
-    // Last digit diversity
-    const digitSet = new Set(sorted.map(n=>n%10));
-    score += digitSet.size * 0.5;
-    const digitCounts = {};
-    sorted.forEach(n => { const d = n%10; digitCounts[d]=(digitCounts[d]||0)+1; });
-    if (Object.values(digitCounts).some(c=>c>2)) score -= 3;
-
-    return score;
-  }
-
-  function _monteCarloSelect(candidates, scoreFn, iterations) {
-    iterations = iterations || 8000;
-    let bestCombo = null, bestScore = -Infinity;
-    for (let i = 0; i < iterations; i++) {
-      const pool = [...candidates];
-      const combo = [];
-      for (let j = 0; j < 6 && pool.length > 0; j++) {
-        const totalW = pool.reduce((a,c)=>a+Math.max(c[1],0.1),0);
-        let r = Math.random() * totalW;
-        let picked = pool[0];
-        for (const c of pool) {
-          r -= Math.max(c[1], 0.1);
-          if (r <= 0) { picked = c; break; }
-        }
-        combo.push(picked[0]);
-        pool.splice(pool.indexOf(picked), 1);
-      }
-      if (combo.length !== 6) continue;
-      const s = scoreFn(combo);
-      if (s > bestScore) { bestScore = s; bestCombo = combo; }
-    }
-    return bestCombo ? bestCombo.sort((a,b)=>a-b) : candidates.slice(0,6).map(c=>c[0]).sort((a,b)=>a-b);
-  }
-
-  function _getCoolingNums(data) {
-    const recent5 = data.slice(0, 5);
-    const freq = {};
-    recent5.forEach(d => d.nums.forEach(n => freq[n]=(freq[n]||0)+1));
-    const cooling = new Set();
-    for (const [n, c] of Object.entries(freq)) { if (c >= 3) cooling.add(parseInt(n)); }
-    return cooling;
-  }
-
-  function strategyHot(data, weights) {
-    const recent = data.slice(0, 50);
-    const freq = Analyzer.calcFrequency(recent);
-    const trend = Analyzer.calcMovingAvg(data, 20);
-    const cooling = _getCoolingNums(data);
-
-    const scores = {};
-    NUM_RANGE.forEach(n => {
-      const f = freq[n]?.rate || 0;
-      const t = trend[n] ? (trend[n].slope + 1) / 2 : 0.5;
-      let s = f * 0.6 + t * 0.3 + Math.random() * 0.1;
-      if (cooling.has(n)) s *= 0.6;
-      scores[n] = s;
-    });
-
-    const candidates = Object.entries(scores).map(([n,s])=>[parseInt(n),s]).sort((a,b)=>b[1]-a[1]).slice(0,25);
-    const scoreFn = (combo) => _scoreCombination(combo, data);
-    return _monteCarloSelect(candidates, scoreFn);
-  }
-
-  function strategyCold(data) {
-    const freq = Analyzer.calcFrequency(data);
-    const dorm = Analyzer.calcDormancy(data);
-    const maxDorm = Math.max(...Object.values(dorm), 1);
-    const theoreticalRate = 6 / 43;
-    const cooling = _getCoolingNums(data);
-
-    const scores = {};
-    NUM_RANGE.forEach(n => {
-      const actualRate = freq[n]?.rate || 0;
-      const deviation = Math.max(theoreticalRate - actualRate, 0) / theoreticalRate;
-      const d = (dorm[n] || 0) / maxDorm;
-      const overdueRatio = d > 0.3 ? (d - 0.2) * 2 : d;
-      let s = deviation * 0.5 + overdueRatio * 0.4 + Math.random() * 0.1;
-      if (cooling.has(n)) s *= 0.7;
-      if (actualRate < theoreticalRate * 0.5 && d > 0.5) s *= 0.5;
-      scores[n] = s;
-    });
-
-    const candidates = Object.entries(scores).map(([n,s])=>[parseInt(n),s]).sort((a,b)=>b[1]-a[1]).slice(0,25);
-    const scoreFn = (combo) => _scoreCombination(combo, data);
-    return _monteCarloSelect(candidates, scoreFn);
-  }
-
-  function strategyOverdue(data) {
-    const freq = Analyzer.calcFrequency(data);
-    const recent = data.slice(0, 50);
-    const corr = Analyzer.calcCorrelation(recent, 50);
-    const cooling = _getCoolingNums(data);
-
-    // Markov transition
-    const transition = {};
-    for (let i = 1; i < data.length; i++) {
-      for (const prev of data[i-1].nums) {
-        if (!transition[prev]) transition[prev] = {};
-        for (const curr of data[i].nums) {
-          transition[prev][curr] = (transition[prev][curr]||0) + 1;
-        }
-      }
-    }
-    // Normalize
-    for (const prev of Object.keys(transition)) {
-      const total = Object.values(transition[prev]).reduce((a,b)=>a+b,0);
-      for (const curr of Object.keys(transition[prev])) {
-        transition[prev][curr] /= total;
-      }
-    }
-
-    const lastDraw = data[0].nums;
-    const scores = {};
-    NUM_RANGE.forEach(n => {
-      let markovScore = 0;
-      for (const prev of lastDraw) {
-        markovScore += (transition[prev]?.[n] || 0) * 2;
-      }
-      const f = freq[n]?.rate || 0;
-      let s = markovScore * 0.5 + f * 0.3 + Math.random() * 0.2;
-      if (cooling.has(n)) s *= 0.7;
-      scores[n] = s;
-    });
-
-    const candidates = Object.entries(scores).map(([n,s])=>[parseInt(n),s]).sort((a,b)=>b[1]-a[1]).slice(0,25);
-    const scoreFn = (combo) => _scoreCombination(combo, data);
-    return _monteCarloSelect(candidates, scoreFn);
-  }
-
-  function strategyBalanced(data) {
-    const freq = Analyzer.calcFrequency(data);
-    const cooling = _getCoolingNums(data);
-
-    const fibs = new Set([1,2,3,5,8,13,21,34]);
-    const primes = new Set([2,3,5,7,11,13,17,19,23,29,31,37,41,43]);
-    const phi = 1.618033988749895;
-
-    const scores = {};
-    NUM_RANGE.forEach(n => {
-      let s = 0;
-      if (fibs.has(n)) s += 0.15;
-      if (primes.has(n)) s += 0.1;
-      const phiDist = Math.min(...[1,2,3,4,5].map(k => Math.abs(n - Math.round(phi*k*5.3))));
-      s += Math.max(0, 0.25 - phiDist * 0.05);
-      s += Math.exp(-Math.pow(n-22,2)/(2*100)) * 0.15;
-      s += (freq[n]?.rate || 0) * 0.2 + Math.random() * 0.15;
-      if (cooling.has(n)) s *= 0.7;
-      scores[n] = s;
-    });
-
-    const candidates = Object.entries(scores).map(([n,s])=>[parseInt(n),s]).sort((a,b)=>b[1]-a[1]).slice(0,25);
-    const scoreFn = (combo) => _scoreCombination(combo, data);
-    return _monteCarloSelect(candidates, scoreFn);
-  }
-
-  function strategyComposite(data, weights) {
-    const w = weights || Storage.getWeights();
-    const wFreq = (w.frequency || 25) / 100;
-    const wDorm = (w.dormancy || 20) / 100;
-    const wCorr = (w.correlation || 20) / 100;
-    const wTrend = (w.trend || 15) / 100;
-    const wBalance = (w.balance || 10) / 100;
-    const wWeekday = (w.weekday || 10) / 100;
-
-    const recent = data.slice(0, 50);
-    const freq = Analyzer.calcFrequency(recent);
-    const dorm = Analyzer.calcDormancy(data);
-    const maxDorm = Math.max(...Object.values(dorm), 1);
-    const trend = Analyzer.calcMovingAvg(data, 20);
-    const corr = Analyzer.calcCorrelation(recent, 50);
-    const wdTrend = Analyzer.calcWeekdayTrend(data);
-    const cooling = _getCoolingNums(data);
-
-    const corrScore = {};
-    corr.forEach(({pair, count}) => {
-      const [a, b] = pair.split('-').map(Number);
-      corrScore[a] = (corrScore[a] || 0) + count;
-      corrScore[b] = (corrScore[b] || 0) + count;
-    });
-    const maxCorrVal = Math.max(...Object.values(corrScore), 1);
-
-    const nd = Utils.nextDrawDate();
-    const isMonday = nd.getDay() === 1;
-    const wdFreq = isMonday ? wdTrend.monday?.frequency : wdTrend.thursday?.frequency;
-
-    const scores = {};
-    NUM_RANGE.forEach(n => {
-      const f = freq[n]?.rate || 0;
-      const d = (dorm[n] || 0) / maxDorm;
-      const c = (corrScore[n] || 0) / maxCorrVal;
-      const t = trend[n] ? (trend[n].slope + 1) / 2 : 0.5;
-      const wd = wdFreq ? (wdFreq[n]?.rate || 0) : 0;
-      let s = f * wFreq + d * wDorm + c * wCorr + t * wTrend + wBalance + wd * wWeekday;
-      if (cooling.has(n)) s *= 0.7;
-      s += Math.random() * 0.05;
-      scores[n] = s;
-    });
-
-    const candidates = Object.entries(scores).map(([n,s])=>[parseInt(n),s]).sort((a,b)=>b[1]-a[1]).slice(0,25);
-    const scoreFn = (combo) => _scoreCombination(combo, data);
-    return _monteCarloSelect(candidates, scoreFn, 10000);
-  }
-
-  function generate(data) {
-    if (!data || data.length === 0) return [];
-    const weights = Storage.getWeights();
-    const drawInfo = Utils.nextDrawInfo();
-    const strategies = [
-      { name: 'hot', fn: () => strategyHot(data, weights) },
-      { name: 'cold', fn: () => strategyCold(data) },
-      { name: 'overdue', fn: () => strategyOverdue(data) },
-      { name: 'balanced', fn: () => strategyBalanced(data) },
-      { name: 'composite', fn: () => strategyComposite(data, weights) },
-    ];
-
-    const sets = [];
-    const allUsedNumbers = {};
-
-    for (const {name, fn} of strategies) {
-      let nums;
-      for (let attempt = 0; attempt < 100; attempt++) {
-        nums = fn();
-        // Check diversity: no number in more than 2 patterns
-        let valid = true;
-        for (const n of nums) {
-          if ((allUsedNumbers[n] || 0) >= 2) { valid = false; break; }
-        }
-        if (valid) {
-          nums.forEach(n => allUsedNumbers[n] = (allUsedNumbers[n]||0)+1);
-          break;
-        }
-      }
-      sets.push({ strategy: name, nums });
-    }
-
-    const prediction = {
-      targetDrawId: drawInfo.id,
-      targetDate: drawInfo.date,
-      targetWeekday: drawInfo.weekday,
-      createdAt: new Date().toISOString(),
-      weightsUsed: { ...weights },
-      verified: false,
-      sets,
-    };
-
-    Storage.savePrediction(prediction);
-    return prediction;
-  }
-
-  return { generate, STRATEGY_NAMES };
-})();
-
-================================================================
-  FILE 3: js/learner.js
-================================================================
-/* ===== Auto-Learning Engine (v2.0 - Enhanced) ===== */
-
-const Learner = (() => {
-  const LEARNING_RATE = 0.1;
-  const MIN_SAMPLES = 3;
-  const MIN_RELIABLE_SAMPLES = 10;
-  const MIN_WEIGHT = 5;
-  const MAX_WEIGHT = 50;
-
-  const STRATEGY_FACTOR_MAP = {
-    hot: 'frequency',
-    cold: 'dormancy',
-    overdue: 'dormancy',
-    balanced: 'balance',
-    composite: 'correlation',
-  };
-
-  function autoLearn() {
-    const verifications = Storage.getVerifications();
-    if (verifications.length < MIN_SAMPLES) return null;
-
-    const currentWeights = Storage.getWeights();
-    const beforeWeights = { ...currentWeights };
-
-    const strategyScores = {};
-    const strategyCounts = {};
-
-    verifications.forEach(v => {
-      v.results.forEach(r => {
-        if (!strategyScores[r.strategy]) {
-          strategyScores[r.strategy] = 0;
-          strategyCounts[r.strategy] = 0;
-        }
-        strategyScores[r.strategy] += r.matchCount;
-        strategyCounts[r.strategy]++;
-      });
-    });
-
-    const avgScores = {};
-    for (const s of Object.keys(strategyScores)) {
-      avgScores[s] = strategyCounts[s] > 0 ? strategyScores[s] / strategyCounts[s] : 0;
-    }
-
-    let bestStrategy = 'composite';
-    let bestScore = 0;
-    for (const [s, score] of Object.entries(avgScores)) {
-      if (score > bestScore) { bestScore = score; bestStrategy = s; }
-    }
-
-    const totalAvg = Object.values(avgScores).reduce((a,b) => a+b, 0) / Object.keys(avgScores).length || 1;
-
-    const weightKeys = ['frequency', 'dormancy', 'correlation', 'trend', 'balance', 'weekday'];
-    const targetWeights = { ...currentWeights };
-
-    // Only adjust if we have enough samples for reliable learning
-    if (verifications.length >= MIN_RELIABLE_SAMPLES) {
-      for (const [strategy, score] of Object.entries(avgScores)) {
-        const factor = STRATEGY_FACTOR_MAP[strategy];
-        if (!factor || targetWeights[factor] === undefined) continue;
-
-        const ratio = totalAvg > 0 ? score / totalAvg : 1;
-        if (ratio > 1) {
-          targetWeights[factor] = Math.min(MAX_WEIGHT, targetWeights[factor] * (1 + (ratio - 1) * 0.3));
-        } else {
-          targetWeights[factor] = Math.max(MIN_WEIGHT, targetWeights[factor] * (1 - (1 - ratio) * 0.15));
-        }
-      }
-    }
-
-    const newWeights = {};
-    for (const key of weightKeys) {
-      const current = currentWeights[key] || 10;
-      const target = targetWeights[key] || 10;
-      newWeights[key] = Math.round(current + LEARNING_RATE * (target - current));
-      newWeights[key] = Math.max(MIN_WEIGHT, Math.min(MAX_WEIGHT, newWeights[key]));
-    }
-
-    const total = Object.values(newWeights).reduce((a,b) => a+b, 0);
-    for (const key of weightKeys) {
-      newWeights[key] = Math.round(newWeights[key] / total * 100);
-    }
-    const sum = Object.values(newWeights).reduce((a,b) => a+b, 0);
-    if (sum !== 100) {
-      const maxKey = weightKeys.reduce((a, b) => newWeights[a] >= newWeights[b] ? a : b);
-      newWeights[maxKey] += 100 - sum;
-    }
-
-    const changed = weightKeys.some(k => newWeights[k] !== beforeWeights[k]);
-    if (!changed) return null;
-
-    Storage.saveWeights(newWeights);
-
-    const entry = {
-      learnedAt: new Date().toISOString(),
-      triggerDrawId: verifications[0]?.targetDrawId,
-      beforeWeights,
-      afterWeights: { ...newWeights },
-      strategyScores: avgScores,
-      bestStrategy,
-      totalSamples: verifications.length,
-    };
-    Storage.saveLearningEntry(entry);
-
-    return entry;
-  }
-
-  function resetWeights() {
-    Storage.saveWeights({ ...Storage.DEFAULT_SETTINGS.weights });
-  }
-
-  function getStatus() {
-    const history = Storage.getLearningHistory();
-    const weights = Storage.getWeights();
-    const verifications = Storage.getVerifications();
-
-    let previousWeights = null;
-    if (history.length > 0) {
-      previousWeights = history[0].beforeWeights;
-    }
-
-    return {
-      currentWeights: weights,
-      previousWeights,
-      learningCount: history.length,
-      totalSamples: verifications.length,
-      recentHistory: history.slice(0, 5),
-      bestStrategy: history.length > 0 ? history[0].bestStrategy : null,
-      bestStrategyAvg: history.length > 0 ? history[0].strategyScores?.[history[0].bestStrategy] : null,
-    };
-  }
-
-  return { autoLearn, resetWeights, getStatus };
-})();
-
-================================================================
-  FILE 4: loto6-predictor.html (メインファイル)
-================================================================
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v1.0.0
-  Created: 2026-03-16
+  Loto6 AI Predictor v3.0.0
+  Created: 2026-03-16 / Updated: 2026-03-19
   Description: AI-powered Loto6 prediction app using statistical
-  analysis algorithms. Single HTML file, no server required.
+  analysis algorithms with 12 advanced improvements.
+  Single HTML file, no server required.
 ============================================================ -->
 <html lang="ja">
 <head>
@@ -1169,7 +464,29 @@ body {
     <div class="chart-container mb-16"><canvas id="sumChart"></canvas></div>
     <div class="chart-container"><canvas id="consChart"></canvas></div>
     <div class="chart-container mb-16"><canvas id="gapChart"></canvas></div>
+    <div class="chart-container mb-16"><canvas id="entropyChart"></canvas></div>
     <div class="chart-container"><canvas id="consecTrendChart"></canvas></div>
+  </div>
+
+  <!-- Improvement 11: Additional statistics displays -->
+  <div class="card">
+    <div class="card-title">🤝 数字ペア相関 Top20</div>
+    <div id="pairCorrelationList" style="font-size:13px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📅 曜日別出現傾向比較</div>
+    <div id="dayOfWeekStats" style="font-size:13px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 直近10回バイアス分析</div>
+    <div id="recentBiasStats" style="font-size:13px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔄 周期性が検出された数字</div>
+    <div id="periodicityList" style="font-size:13px"></div>
   </div>
 </div>
 
@@ -1646,7 +963,251 @@ function calcDynamicFrequency(data) {
   return dynFreq;
 }
 
-// === PREDICTION ALGORITHMS (v2 - Enhanced) ===
+// === ADVANCED ANALYSIS FUNCTIONS (v3 - Additional Improvements) ===
+
+// Cache for expensive computations
+const _analysisCache = {};
+
+// Improvement 1: Pair correlation analysis
+function calcPairCorrelation(data) {
+  if (_analysisCache.pairCorr && _analysisCache.pairCorr.len === data.length) return _analysisCache.pairCorr.result;
+  const pairCount = {};
+  const singleCount = new Array(44).fill(0);
+  for (const draw of data) {
+    for (const n of draw.n) singleCount[n]++;
+    for (let a = 0; a < draw.n.length; a++) {
+      for (let b = a + 1; b < draw.n.length; b++) {
+        const key = Math.min(draw.n[a], draw.n[b]) + '-' + Math.max(draw.n[a], draw.n[b]);
+        pairCount[key] = (pairCount[key] || 0) + 1;
+      }
+    }
+  }
+  const expectedPairRate = (6/43) * (5/42);
+  const pairScores = {};
+  for (const [key, count] of Object.entries(pairCount)) {
+    const expected = data.length * expectedPairRate;
+    pairScores[key] = (count - expected) / Math.sqrt(expected);
+  }
+  const result = { pairCount, pairScores, singleCount };
+  _analysisCache.pairCorr = { len: data.length, result };
+  return result;
+}
+
+function calcPairBonusForCombo(combo, pairScores) {
+  let bonus = 0;
+  const sorted = [...combo].sort((a,b)=>a-b);
+  for (let a = 0; a < sorted.length; a++) {
+    for (let b = a + 1; b < sorted.length; b++) {
+      const key = sorted[a] + '-' + sorted[b];
+      if (pairScores[key]) bonus += Math.max(0, pairScores[key]);
+    }
+  }
+  return bonus;
+}
+
+// Improvement 2: Day of week pattern analysis
+function calcDayOfWeekPattern(data) {
+  const mondayFreq = new Array(44).fill(0);
+  const thursdayFreq = new Array(44).fill(0);
+  let mondayCount = 0, thursdayCount = 0;
+  for (const draw of data) {
+    const day = new Date(draw.d).getDay();
+    if (day === 1) {
+      mondayCount++;
+      for (const n of draw.n) mondayFreq[n]++;
+    } else if (day === 4) {
+      thursdayCount++;
+      for (const n of draw.n) thursdayFreq[n]++;
+    }
+  }
+  const dayBias = {};
+  for (let n = 1; n <= 43; n++) {
+    const monRate = mondayCount > 0 ? mondayFreq[n] / mondayCount : 0;
+    const thuRate = thursdayCount > 0 ? thursdayFreq[n] / thursdayCount : 0;
+    dayBias[n] = { monday: monRate, thursday: thuRate, diff: monRate - thuRate };
+  }
+  return { dayBias, mondayCount, thursdayCount, mondayFreq, thursdayFreq };
+}
+
+// Improvement 3: Set ball trend estimation
+function estimateSetBallTrend(data) {
+  const recent10 = data.slice(-10);
+  const freqRecent = new Array(44).fill(0);
+  for (const d of recent10) for (const n of d.n) freqRecent[n]++;
+  const hotBySet = [];
+  for (let n = 1; n <= 43; n++) {
+    if (freqRecent[n] / 10 > 0.28) hotBySet.push(n);
+  }
+  return { hotBySet, freqRecent };
+}
+
+// Improvement 4: Sum decade pattern
+function calcSumDecadePattern(data) {
+  const decades = {};
+  for (const draw of data) {
+    const sum = draw.n.reduce((a, b) => a + b, 0);
+    const decade = Math.floor(sum / 10) * 10;
+    decades[decade] = (decades[decade] || 0) + 1;
+  }
+  const top3 = Object.entries(decades)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([d, c]) => ({ decade: parseInt(d), count: c, rate: c / data.length }));
+  return top3;
+}
+
+// Improvement 5: Transition pattern (prev→curr shift)
+function calcTransitionPattern(data) {
+  const shifts = [];
+  for (let i = 1; i < data.length; i++) {
+    const prev = [...data[i-1].n].sort((a,b) => a-b);
+    const curr = [...data[i].n].sort((a,b) => a-b);
+    for (let j = 0; j < 6; j++) {
+      shifts.push(curr[j] - prev[j]);
+    }
+  }
+  const mean = shifts.reduce((a,b)=>a+b,0) / shifts.length;
+  const std = Math.sqrt(shifts.reduce((a,b)=>a+(b-mean)**2,0) / shifts.length);
+  const positionShifts = [];
+  for (let j = 0; j < 6; j++) {
+    const posShifts = [];
+    for (let i = 1; i < data.length; i++) {
+      const prev = [...data[i-1].n].sort((a,b) => a-b);
+      const curr = [...data[i].n].sort((a,b) => a-b);
+      posShifts.push(curr[j] - prev[j]);
+    }
+    const posMean = posShifts.reduce((a,b)=>a+b,0) / posShifts.length;
+    positionShifts.push(posMean);
+  }
+  return { mean, std, positionShifts };
+}
+
+// Improvement 6: Entropy analysis
+function calcComboEntropy(combo) {
+  const sorted = [...combo].sort((a,b)=>a-b);
+  const gaps = sorted.slice(1).map((n,i) => n - sorted[i]);
+  const totalGap = 43;
+  const normalizedGaps = gaps.map(g => g / totalGap);
+  let entropy = 0;
+  for (const p of normalizedGaps) {
+    if (p > 0) entropy -= p * Math.log2(p);
+  }
+  return entropy;
+}
+
+function calcHistoricalEntropyRange(data) {
+  if (_analysisCache.entropyRange && _analysisCache.entropyRange.len === data.length) return _analysisCache.entropyRange.result;
+  const entropies = data.map(d => calcComboEntropy(d.n));
+  const mean = entropies.reduce((a,b)=>a+b,0) / entropies.length;
+  const std = Math.sqrt(entropies.reduce((a,b)=>a+(b-mean)**2,0) / entropies.length);
+  const result = { mean, std, lo: mean - std, hi: mean + std, entropies };
+  _analysisCache.entropyRange = { len: data.length, result };
+  return result;
+}
+
+// Improvement 7: Periodicity detection
+function detectPeriodicity(data, targetNumber) {
+  const intervals = [];
+  let lastSeen = -1;
+  for (let i = 0; i < data.length; i++) {
+    if (data[i].n.includes(targetNumber)) {
+      if (lastSeen >= 0) intervals.push(i - lastSeen);
+      lastSeen = i;
+    }
+  }
+  if (intervals.length < 5) return null;
+  const freqMap = {};
+  for (const iv of intervals) {
+    const bucket = Math.round(iv);
+    freqMap[bucket] = (freqMap[bucket] || 0) + 1;
+  }
+  const topPeriod = Object.entries(freqMap).sort((a,b) => b[1] - a[1])[0];
+  const period = parseInt(topPeriod[0]);
+  const confidence = topPeriod[1] / intervals.length;
+  const sinceLast = data.length - 1 - lastSeen;
+  const dueIn = period - (sinceLast % period);
+  return { period, confidence, sinceLast, dueIn, isAlmostDue: dueIn <= 2 };
+}
+
+function detectAllPeriodicities(data) {
+  if (_analysisCache.periodicities && _analysisCache.periodicities.len === data.length) return _analysisCache.periodicities.result;
+  const result = {};
+  for (let n = 1; n <= 43; n++) {
+    result[n] = detectPeriodicity(data, n);
+  }
+  _analysisCache.periodicities = { len: data.length, result };
+  return result;
+}
+
+// Improvement 8: Recent bias analysis
+function calcRecentBias(data) {
+  const recent = data.slice(-10);
+  const allTime = data;
+  const metrics = {
+    avgSum: {
+      recent: recent.map(d => d.n.reduce((a,b)=>a+b,0)).reduce((a,b)=>a+b,0) / recent.length,
+      allTime: allTime.map(d => d.n.reduce((a,b)=>a+b,0)).reduce((a,b)=>a+b,0) / allTime.length
+    },
+    avgOddCount: {
+      recent: recent.map(d => d.n.filter(n=>n%2===1).length).reduce((a,b)=>a+b,0) / recent.length,
+      allTime: allTime.map(d => d.n.filter(n=>n%2===1).length).reduce((a,b)=>a+b,0) / allTime.length
+    },
+    avgHighCount: {
+      recent: recent.map(d => d.n.filter(n=>n>22).length).reduce((a,b)=>a+b,0) / recent.length,
+      allTime: allTime.map(d => d.n.filter(n=>n>22).length).reduce((a,b)=>a+b,0) / allTime.length
+    }
+  };
+  return {
+    sumBias: metrics.avgSum.recent - metrics.avgSum.allTime,
+    oddBias: metrics.avgOddCount.recent - metrics.avgOddCount.allTime,
+    highBias: metrics.avgHighCount.recent - metrics.avgHighCount.allTime,
+    metrics
+  };
+}
+
+// Improvement 9: Enhanced bonus prediction
+function predictBonus(data, mainNumbers) {
+  const bonusFreq = new Array(44).fill(0);
+  for (const d of data) bonusFreq[d.b]++;
+  const mainToBonus = {};
+  for (const d of data) {
+    for (const n of d.n) {
+      if (!mainToBonus[n]) mainToBonus[n] = new Array(44).fill(0);
+      mainToBonus[n][d.b]++;
+    }
+  }
+  const scores = [];
+  for (let b = 1; b <= 43; b++) {
+    if (mainNumbers.includes(b)) continue;
+    let score = bonusFreq[b] * 0.5;
+    for (const n of mainNumbers) {
+      if (mainToBonus[n]) score += mainToBonus[n][b] * 2;
+    }
+    scores.push({ n: b, score });
+  }
+  scores.sort((a, b) => b.score - a.score);
+  return scores;
+}
+
+// Improvement 10: Odd/Even trend analysis
+function calcOddEvenTrend(data) {
+  const recent20 = data.slice(-20);
+  const oddCounts = recent20.map(d => d.n.filter(n => n % 2 === 1).length);
+  const trend = [];
+  for (let i = 4; i < oddCounts.length; i++) {
+    const avg = oddCounts.slice(i-4, i+1).reduce((a,b)=>a+b,0) / 5;
+    trend.push(avg);
+  }
+  const lastTrend = trend.length >= 4 ? trend[trend.length-1] - trend[trend.length-4] : 0;
+  const patternFreq = {};
+  for (const oc of oddCounts) {
+    const key = oc + ':' + (6-oc);
+    patternFreq[key] = (patternFreq[key] || 0) + 1;
+  }
+  return { lastTrend, patternFreq, recommendedOdd: lastTrend > 0 ? 4 : 3 };
+}
+
+// === PREDICTION ALGORITHMS (v3 - Enhanced with all improvements) ===
 
 // Scoring function for Monte Carlo: evaluates a combination against historical stats
 function scoreCombination(combo, data, gapStats, sumStats, zoneStats, lastDigitStats, gapStatsObj) {
@@ -1697,6 +1258,34 @@ function scoreCombination(combo, data, gapStats, sumStats, zoneStats, lastDigitS
   const digitCounts = {};
   for (const d of lastDigits) digitCounts[d] = (digitCounts[d]||0)+1;
   if (Object.values(digitCounts).some(c=>c>2)) score -= 3;
+
+  // 7. Pair correlation bonus (Improvement 1) - half weight
+  const { pairScores } = calcPairCorrelation(data);
+  const pairBonus = calcPairBonusForCombo(combo, pairScores);
+  score += pairBonus * 1;
+
+  // 8. Entropy analysis (Improvement 6) - half weight
+  const entropy = calcComboEntropy(combo);
+  const entropyRange = calcHistoricalEntropyRange(data);
+  if (entropy >= entropyRange.lo && entropy <= entropyRange.hi) score += 1.5;
+  else score -= 1;
+
+  // 9. Sum decade pattern (Improvement 4)
+  const sumDecades = calcSumDecadePattern(data);
+  const comboSumDecade = Math.floor(sum / 10) * 10;
+  if (sumDecades.some(d => d.decade === comboSumDecade)) score += 2.5;
+
+  // 10. Recent bias / mean reversion (Improvement 8) - half weight
+  const recentBias = calcRecentBias(data);
+  if (recentBias.sumBias > 5 && sum < sumStats.mean) score += 1.5;
+  else if (recentBias.sumBias < -5 && sum > sumStats.mean) score += 1.5;
+  if (recentBias.oddBias > 0.3 && odd <= 3) score += 1;
+  else if (recentBias.oddBias < -0.3 && odd >= 3) score += 1;
+
+  // 11. Odd/Even trend (Improvement 10) - half weight
+  const oeTrend = calcOddEvenTrend(data);
+  if (odd === oeTrend.recommendedOdd) score += 1.5;
+  else if (Math.abs(odd - oeTrend.recommendedOdd) === 1) score += 0.5;
 
   return score;
 }
@@ -1773,6 +1362,9 @@ function buildScoreFn(data, patternIdx, sumTarget) {
   ];
   const gravTarget = gravityTargets[patternIdx];
 
+  // Precompute periodicity for scoring
+  const periodicities = detectAllPeriodicities(data);
+
   return function(combo) {
     let s = scoreCombination(combo, data, gapStats, sumStats, zoneStats, lastDigitStats);
     const sum = combo.reduce((a,b)=>a+b,0);
@@ -1788,37 +1380,53 @@ function buildScoreFn(data, patternIdx, sumTarget) {
       else s -= Math.abs(gravity - (gravTarget.lo+gravTarget.hi)/2) * 0.5;
     }
 
+    // Periodicity bonus (Improvement 7) - half weight
+    for (const n of combo) {
+      const p = periodicities[n];
+      if (p && p.confidence > 0.3 && p.isAlmostDue) s += 1;
+    }
+
     return s;
   };
 }
 
-// Pattern 1: Hot Numbers + Dynamic Window + Monte Carlo
-function predictPattern1(data, rng) {
+// Pattern 1: Hot Numbers + Dynamic Window + Monte Carlo + Set Ball
+function predictPattern1(data, rng, targetDay) {
   const dynFreq = calcDynamicFrequency(data);
   const { freq, trend } = movingAvg(data, 0, 50);
   const excl = calcExclusions(data);
+  const setBall = estimateSetBallTrend(data);
+  const dayPattern = calcDayOfWeekPattern(data);
   const scores = [];
   for (let i = 1; i <= 43; i++) {
     let score = dynFreq[i] * 20 + freq[i] * 2 + Math.max(0, trend[i]) * 3;
     if (excl.coolingNums.has(i)) score *= 0.6;
+    // Set ball bonus (Improvement 3)
+    if (setBall.hotBySet.includes(i)) score += 3;
+    // Day of week bonus (Improvement 2)
+    if (targetDay === 1 && dayPattern.dayBias[i]) score += dayPattern.dayBias[i].monday * 5;
+    else if (targetDay === 4 && dayPattern.dayBias[i]) score += dayPattern.dayBias[i].thursday * 5;
     score += rng() * 2;
     scores.push({ n: i, score });
   }
   scores.sort((a,b) => b.score - a.score);
   const scoreFn = buildScoreFn(data, 0);
   const numbers = monteCarloSelect(scores.slice(0, 25), scoreFn, rng, 8000);
-  const remaining = scores.filter(s => !numbers.includes(s.n));
-  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  // Enhanced bonus prediction (Improvement 9)
+  const bonusScores = predictBonus(data, numbers);
+  const bonus = bonusScores.length > 0 ? bonusScores[Math.floor(rng()*Math.min(3,bonusScores.length))].n : 1;
   return { numbers, bonus };
 }
 
-// Pattern 2: Enhanced Contrarian (Regression to Mean) + Monte Carlo
-function predictPattern2(data, rng) {
+// Pattern 2: Enhanced Contrarian (Regression to Mean) + Periodicity + Monte Carlo
+function predictPattern2(data, rng, targetDay) {
   const intervals = calcIntervals(data);
   const totalDraws = data.length;
   const theoreticalRate = 6/43;
   const freq = calcFrequency(data, null);
   const excl = calcExclusions(data);
+  const periodicities = detectAllPeriodicities(data);
+  const dayPattern = calcDayOfWeekPattern(data);
 
   const scores = [];
   for (let i = 1; i <= 43; i++) {
@@ -1826,25 +1434,29 @@ function predictPattern2(data, rng) {
     const actualRate = freq[i] / totalDraws;
     const deviationRate = (theoreticalRate - actualRate) / theoreticalRate;
     const overdueRatio = iv.since / Math.max(iv.avg, 1);
-    // Regression pressure: higher when overdue ratio > 2
     const regressionPressure = overdueRatio > 2 ? (overdueRatio - 1) * 3 : overdueRatio;
     let score = regressionPressure * 4 + Math.max(0, deviationRate) * 15 + (iv.overdue ? 8 : 0);
-    // Penalize structurally rare numbers (very low overall freq AND low interval avg)
     if (actualRate < theoreticalRate * 0.5 && iv.avg > 15) score *= 0.5;
     if (excl.coolingNums.has(i)) score *= 0.7;
+    // Periodicity bonus (Improvement 7) - especially for contrarian
+    const peri = periodicities[i];
+    if (peri && peri.confidence > 0.3 && peri.isAlmostDue) score += 5;
+    // Day of week bonus (Improvement 2)
+    if (targetDay === 1 && dayPattern.dayBias[i]) score += dayPattern.dayBias[i].monday * 3;
+    else if (targetDay === 4 && dayPattern.dayBias[i]) score += dayPattern.dayBias[i].thursday * 3;
     score += rng() * 2;
     scores.push({ n: i, score });
   }
   scores.sort((a,b) => b.score - a.score);
   const scoreFn = buildScoreFn(data, 1);
   const numbers = monteCarloSelect(scores.slice(0, 25), scoreFn, rng, 8000);
-  const remaining = scores.filter(s => !numbers.includes(s.n));
-  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  const bonusScores = predictBonus(data, numbers);
+  const bonus = bonusScores.length > 0 ? bonusScores[Math.floor(rng()*Math.min(3,bonusScores.length))].n : 1;
   return { numbers, bonus };
 }
 
-// Pattern 3: Markov Chain + Poisson + Gap Analysis + Monte Carlo
-function predictPattern3(data, rng) {
+// Pattern 3: Markov Chain + Transition Pattern + Monte Carlo
+function predictPattern3(data, rng, targetDay) {
   const lambda = 6/43;
   const transition = new Array(44).fill(0).map(() => new Array(44).fill(0));
   for (let i = 1; i < data.length; i++) {
@@ -1861,7 +1473,19 @@ function predictPattern3(data, rng) {
   const prevDraw = data.length > 1 ? data[data.length-2].n : lastDraw;
   const excl = calcExclusions(data);
   const freq50 = calcFrequency(data, 50);
-  const gapStats = calcGapStats(data);
+  const transPattern = calcTransitionPattern(data);
+  const dayPattern = calcDayOfWeekPattern(data);
+
+  // Transition-predicted candidates (Improvement 5)
+  const lastSorted = [...lastDraw].sort((a,b)=>a-b);
+  const transitionCandidates = new Set();
+  for (let j = 0; j < 6; j++) {
+    const predicted = Math.round(lastSorted[j] + transPattern.positionShifts[j]);
+    if (predicted >= 1 && predicted <= 43) transitionCandidates.add(predicted);
+    // Also add nearby numbers
+    if (predicted-1 >= 1) transitionCandidates.add(predicted-1);
+    if (predicted+1 <= 43) transitionCandidates.add(predicted+1);
+  }
 
   const scores = [];
   for (let n = 1; n <= 43; n++) {
@@ -1871,24 +1495,27 @@ function predictPattern3(data, rng) {
     const observed = freq50[n] / 50;
     const poissonScore = Math.abs(observed - lambda) < 0.02 ? 3 : observed > lambda ? 2 : 1;
     let score = markovScore * 5 + poissonScore;
-    // Carryover logic
     if (lastDraw.includes(n) && rng() < excl.expectedCarry / 6) score += 5;
-    // Bonus appear in next draw
     if (n === excl.lastDraw.b && rng() < excl.bonusAppearRate) score += 3;
     if (excl.coolingNums.has(n)) score *= 0.7;
+    // Transition pattern bonus (Improvement 5)
+    if (transitionCandidates.has(n)) score += 3;
+    // Day of week bonus (Improvement 2)
+    if (targetDay === 1 && dayPattern.dayBias[n]) score += dayPattern.dayBias[n].monday * 3;
+    else if (targetDay === 4 && dayPattern.dayBias[n]) score += dayPattern.dayBias[n].thursday * 3;
     score += rng() * 2;
     scores.push({ n, score });
   }
   scores.sort((a,b) => b.score - a.score);
   const scoreFn = buildScoreFn(data, 2);
   const numbers = monteCarloSelect(scores.slice(0, 25), scoreFn, rng, 8000);
-  const remaining = scores.filter(s => !numbers.includes(s.n));
-  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  const bonusScores = predictBonus(data, numbers);
+  const bonus = bonusScores.length > 0 ? bonusScores[Math.floor(rng()*Math.min(3,bonusScores.length))].n : 1;
   return { numbers, bonus };
 }
 
 // Pattern 4: Number Theory + Zone Balance + Monte Carlo (free gravity)
-function predictPattern4(data, rng) {
+function predictPattern4(data, rng, targetDay) {
   const fibs = new Set([1,2,3,5,8,13,21,34]);
   const primes = new Set([2,3,5,7,11,13,17,19,23,29,31,37,41,43]);
   const triangulars = new Set([1,3,6,10,15,21,28,36]);
@@ -1896,6 +1523,7 @@ function predictPattern4(data, rng) {
   const freq100 = calcFrequency(data, 100);
   const excl = calcExclusions(data);
   const dynFreq = calcDynamicFrequency(data);
+  const dayPattern = calcDayOfWeekPattern(data);
 
   const scores = [];
   for (let n = 1; n <= 43; n++) {
@@ -1908,19 +1536,22 @@ function predictPattern4(data, rng) {
     score += Math.exp(-Math.pow(n-22,2)/(2*100)) * 3;
     score += freq100[n] / 10 + dynFreq[n] * 5;
     if (excl.coolingNums.has(n)) score *= 0.7;
+    // Day of week bonus (Improvement 2)
+    if (targetDay === 1 && dayPattern.dayBias[n]) score += dayPattern.dayBias[n].monday * 3;
+    else if (targetDay === 4 && dayPattern.dayBias[n]) score += dayPattern.dayBias[n].thursday * 3;
     score += rng() * 2;
     scores.push({ n, score });
   }
   scores.sort((a,b) => b.score - a.score);
   const scoreFn = buildScoreFn(data, 3);
   const numbers = monteCarloSelect(scores.slice(0, 25), scoreFn, rng, 8000);
-  const remaining = scores.filter(s => !numbers.includes(s.n));
-  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  const bonusScores = predictBonus(data, numbers);
+  const bonus = bonusScores.length > 0 ? bonusScores[Math.floor(rng()*Math.min(3,bonusScores.length))].n : 1;
   return { numbers, bonus };
 }
 
 // Pattern 5: Ensemble (Bayesian + All Strategies) + Monte Carlo (center gravity)
-function predictPattern5(data, rng, weights) {
+function predictPattern5(data, rng, weights, targetDay) {
   const w = weights || [1,1,1,1];
   const s1 = getScores_P1(data);
   const s2 = getScores_P2(data);
@@ -1928,6 +1559,7 @@ function predictPattern5(data, rng, weights) {
   const s4 = getScores_P4(data);
   const freq = calcFrequency(data, null);
   const excl = calcExclusions(data);
+  const dayPattern = calcDayOfWeekPattern(data);
 
   const combined = [];
   for (let n = 1; n <= 43; n++) {
@@ -1939,14 +1571,17 @@ function predictPattern5(data, rng, weights) {
     if (n % 7 === 0) score *= 0.95;
     if (n > 30) score *= 1.05;
     if (excl.coolingNums.has(n)) score *= 0.7;
+    // Day of week bonus (Improvement 2)
+    if (targetDay === 1 && dayPattern.dayBias[n]) score += dayPattern.dayBias[n].monday * 2;
+    else if (targetDay === 4 && dayPattern.dayBias[n]) score += dayPattern.dayBias[n].thursday * 2;
     score += rng() * 1.5;
     combined.push({ n, score });
   }
   combined.sort((a,b) => b.score - a.score);
   const scoreFn = buildScoreFn(data, 4);
   const numbers = monteCarloSelect(combined.slice(0, 25), scoreFn, rng, 10000);
-  const remaining = combined.filter(s => !numbers.includes(s.n));
-  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  const bonusScores = predictBonus(data, numbers);
+  const bonus = bonusScores.length > 0 ? bonusScores[Math.floor(rng()*Math.min(3,bonusScores.length))].n : 1;
   return { numbers, bonus };
 }
 
@@ -2001,12 +1636,14 @@ function generatePredictions(targetDate, targetRound) {
   const data = getAllData();
   const weights = LS.get('ensembleWeights') || [1,1,1,1];
 
+  const targetDay = targetDate.getDay(); // 1=Monday, 4=Thursday
+
   const patterns = [
-    { name: 'ホット頻度型', icon: '🔥', method: '動的ウィンドウ＋モンテカルロ', fn: predictPattern1, desc: '' },
-    { name: '逆張り回帰型', icon: '❄️', method: '平均回帰＋乖離率分析', fn: predictPattern2, desc: '' },
-    { name: 'マルコフ連鎖型', icon: '🔗', method: 'マルコフ遷移＋ギャップ分析', fn: predictPattern3, desc: '' },
-    { name: '数論バランス型', icon: '📐', method: 'フィボナッチ＋5ゾーンバランス', fn: predictPattern4, desc: '' },
-    { name: 'アンサンブルAI型', icon: '🎯', method: 'ベイズ統合＋モンテカルロ最適化', fn: (d,r) => predictPattern5(d,r,weights), desc: '' },
+    { name: 'ホット頻度型', icon: '🔥', method: '動的ウィンドウ＋セット球＋曜日分析', fn: (d,r) => predictPattern1(d,r,targetDay), desc: '' },
+    { name: '逆張り回帰型', icon: '❄️', method: '平均回帰＋周期検出＋曜日分析', fn: (d,r) => predictPattern2(d,r,targetDay), desc: '' },
+    { name: 'マルコフ連鎖型', icon: '🔗', method: 'マルコフ遷移＋シフトパターン分析', fn: (d,r) => predictPattern3(d,r,targetDay), desc: '' },
+    { name: '数論バランス型', icon: '📐', method: 'フィボナッチ＋ゾーン＋曜日分析', fn: (d,r) => predictPattern4(d,r,targetDay), desc: '' },
+    { name: 'アンサンブルAI型', icon: '🎯', method: 'ベイズ統合＋全改善統合最適化', fn: (d,r) => predictPattern5(d,r,weights,targetDay), desc: '' },
   ];
 
   // Generate initial predictions
@@ -2470,6 +2107,108 @@ function renderStats() {
   renderHotCold();
   renderIntervalTable();
   renderDistCharts();
+  renderAdvancedStats();
+}
+
+function renderAdvancedStats() {
+  const data = getAllData();
+
+  // Pair correlation Top20
+  const { pairScores, pairCount } = calcPairCorrelation(data);
+  const topPairs = Object.entries(pairScores)
+    .filter(([k,v]) => v > 0)
+    .sort((a,b) => b[1] - a[1])
+    .slice(0, 20);
+  let pairHtml = '<table class="data-table"><thead><tr><th>ペア</th><th>同時出現</th><th>Zスコア</th></tr></thead><tbody>';
+  for (const [key, zscore] of topPairs) {
+    const count = pairCount[key] || 0;
+    const barWidth = Math.min(100, Math.max(10, zscore * 20));
+    pairHtml += `<tr><td style="font-family:var(--mono);font-weight:700">${key}</td><td>${count}回</td><td><div style="display:flex;align-items:center;gap:6px"><div style="width:${barWidth}px;height:14px;background:linear-gradient(90deg,#3B82F6,#EF4444);border-radius:3px"></div>${zscore.toFixed(2)}</div></td></tr>`;
+  }
+  pairHtml += '</tbody></table>';
+  const el1 = document.getElementById('pairCorrelationList');
+  if (el1) el1.innerHTML = pairHtml;
+
+  // Day of week comparison
+  const dayData = calcDayOfWeekPattern(data);
+  let dayHtml = `<p style="margin-bottom:8px">月曜抽選: ${dayData.mondayCount}回 / 木曜抽選: ${dayData.thursdayCount}回</p>`;
+  dayHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">';
+  // Top numbers for Monday
+  const monTop = [];
+  const thuTop = [];
+  for (let n = 1; n <= 43; n++) {
+    monTop.push({ n, rate: dayData.dayBias[n].monday });
+    thuTop.push({ n, rate: dayData.dayBias[n].thursday });
+  }
+  monTop.sort((a,b) => b.rate - a.rate);
+  thuTop.sort((a,b) => b.rate - a.rate);
+  dayHtml += '<div><h4 style="font-size:13px;margin-bottom:6px">月曜に出やすい Top10</h4>';
+  for (const item of monTop.slice(0,10)) {
+    dayHtml += `<span class="number-tag hot">${item.n}</span>`;
+  }
+  dayHtml += '</div>';
+  dayHtml += '<div><h4 style="font-size:13px;margin-bottom:6px">木曜に出やすい Top10</h4>';
+  for (const item of thuTop.slice(0,10)) {
+    dayHtml += `<span class="number-tag cold">${item.n}</span>`;
+  }
+  dayHtml += '</div></div>';
+  // Show numbers with biggest day bias
+  const biased = [];
+  for (let n = 1; n <= 43; n++) {
+    biased.push({ n, diff: dayData.dayBias[n].diff });
+  }
+  biased.sort((a,b) => Math.abs(b.diff) - Math.abs(a.diff));
+  dayHtml += '<div style="margin-top:12px"><h4 style="font-size:13px;margin-bottom:6px">曜日偏差が大きい数字</h4>';
+  dayHtml += '<table class="data-table"><thead><tr><th>数字</th><th>月曜出現率</th><th>木曜出現率</th><th>差</th></tr></thead><tbody>';
+  for (const item of biased.slice(0,10)) {
+    const db = dayData.dayBias[item.n];
+    dayHtml += `<tr><td style="font-family:var(--mono);font-weight:700">${item.n}</td><td>${(db.monday*100).toFixed(1)}%</td><td>${(db.thursday*100).toFixed(1)}%</td><td style="color:${item.diff>0?'#EF4444':'#3B82F6'}">${item.diff>0?'+':''}${(item.diff*100).toFixed(1)}%</td></tr>`;
+  }
+  dayHtml += '</tbody></table></div>';
+  const el2 = document.getElementById('dayOfWeekStats');
+  if (el2) el2.innerHTML = dayHtml;
+
+  // Recent bias analysis
+  const bias = calcRecentBias(data);
+  let biasHtml = '<div class="stat-grid" style="margin-bottom:12px">';
+  biasHtml += `<div class="stat-card"><div class="stat-value" style="font-size:20px;color:${bias.sumBias>0?'#EF4444':'#3B82F6'}">${bias.sumBias>0?'+':''}${bias.sumBias.toFixed(1)}</div><div class="stat-label">合計値バイアス</div></div>`;
+  biasHtml += `<div class="stat-card"><div class="stat-value" style="font-size:20px;color:${bias.oddBias>0?'#EF4444':'#3B82F6'}">${bias.oddBias>0?'+':''}${bias.oddBias.toFixed(2)}</div><div class="stat-label">奇数バイアス</div></div>`;
+  biasHtml += `<div class="stat-card"><div class="stat-value" style="font-size:20px;color:${bias.highBias>0?'#EF4444':'#3B82F6'}">${bias.highBias>0?'+':''}${bias.highBias.toFixed(2)}</div><div class="stat-label">高数字バイアス</div></div>`;
+  biasHtml += '</div>';
+  biasHtml += '<div style="font-size:12px;color:var(--muted);line-height:1.6">';
+  if (bias.sumBias > 5) biasHtml += '直近10回は合計値が高め → 次回は低め寄りの可能性<br>';
+  else if (bias.sumBias < -5) biasHtml += '直近10回は合計値が低め → 次回は高め寄りの可能性<br>';
+  if (bias.oddBias > 0.3) biasHtml += '直近は奇数が多め → 次回は偶数増加の可能性<br>';
+  else if (bias.oddBias < -0.3) biasHtml += '直近は偶数が多め → 次回は奇数増加の可能性<br>';
+  if (bias.highBias > 0.3) biasHtml += '直近は高数字が多め → 次回は低数字増加の可能性<br>';
+  else if (bias.highBias < -0.3) biasHtml += '直近は低数字が多め → 次回は高数字増加の可能性<br>';
+  if (Math.abs(bias.sumBias) <= 5 && Math.abs(bias.oddBias) <= 0.3 && Math.abs(bias.highBias) <= 0.3) biasHtml += '直近はバランスの取れた傾向です。';
+  biasHtml += '</div>';
+  const el3 = document.getElementById('recentBiasStats');
+  if (el3) el3.innerHTML = biasHtml;
+
+  // Periodicity list
+  const periodicities = detectAllPeriodicities(data);
+  const periodicNums = [];
+  for (let n = 1; n <= 43; n++) {
+    const p = periodicities[n];
+    if (p && p.confidence > 0.2) periodicNums.push({ n, ...p });
+  }
+  periodicNums.sort((a,b) => b.confidence - a.confidence);
+  let periHtml = '';
+  if (periodicNums.length === 0) {
+    periHtml = '<p style="color:var(--muted)">十分な周期性が検出された数字はありません</p>';
+  } else {
+    periHtml = '<table class="data-table"><thead><tr><th>数字</th><th>周期</th><th>信頼度</th><th>前回から</th><th>次回予想</th><th>状態</th></tr></thead><tbody>';
+    for (const p of periodicNums) {
+      const statusColor = p.isAlmostDue ? '#EF4444' : '#10B981';
+      const statusText = p.isAlmostDue ? '出現間近' : `あと${p.dueIn}回`;
+      periHtml += `<tr><td style="font-family:var(--mono);font-weight:700">${p.n}</td><td>${p.period}回</td><td>${(p.confidence*100).toFixed(0)}%</td><td>${p.sinceLast}回前</td><td>${p.dueIn}回後</td><td style="color:${statusColor};font-weight:700">${statusText}</td></tr>`;
+    }
+    periHtml += '</tbody></table>';
+  }
+  const el4 = document.getElementById('periodicityList');
+  if (el4) el4.innerHTML = periHtml;
 }
 
 function renderFreqChart() {
@@ -2660,6 +2399,35 @@ function renderDistCharts() {
         responsive: true,
         maintainAspectRatio: true,
         plugins: { title: { display: true, text: '連番ペア出現頻度 Top20' } }
+      }
+    });
+  }
+
+  // Entropy distribution chart (Improvement 11)
+  const entropyRange = calcHistoricalEntropyRange(data);
+  const entropyBins = {};
+  for (const e of entropyRange.entropies) {
+    const bin = (Math.floor(e * 10) / 10).toFixed(1);
+    entropyBins[bin] = (entropyBins[bin]||0) + 1;
+  }
+  const entropyLabels = Object.keys(entropyBins).sort((a,b) => parseFloat(a) - parseFloat(b));
+  if (charts.entropy) charts.entropy.destroy();
+  const eCtx = document.getElementById('entropyChart');
+  if (eCtx) {
+    const entropyColors = entropyLabels.map(l => {
+      const v = parseFloat(l);
+      return (v >= entropyRange.lo && v <= entropyRange.hi) ? '#10B981' : '#94A3B8';
+    });
+    charts.entropy = new Chart(eCtx, {
+      type: 'bar',
+      data: {
+        labels: entropyLabels,
+        datasets: [{ label: '出現回数', data: entropyLabels.map(l => entropyBins[l]), backgroundColor: entropyColors, borderRadius: 4 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { title: { display: true, text: `エントロピー分布（平均:${entropyRange.mean.toFixed(2)} ±1σ範囲:${entropyRange.lo.toFixed(2)}-${entropyRange.hi.toFixed(2)}）` } }
       }
     });
   }
@@ -3071,78 +2839,89 @@ function savePrize() {
   renderSettings();
 }
 
-// === BACKTEST FUNCTION ===
-window.__backtest = function(n) {
-  n = n || 10;
-  const data = getAllData();
-  if (data.length < n + 50) {
-    console.log('Not enough data for backtest. Need at least ' + (n+50) + ' draws.');
-    return;
-  }
+// === BACKTEST FUNCTION (v3 - Enhanced) ===
 
-  console.log(`=== BACKTEST: Last ${n} draws ===`);
-  console.log('');
-
+// Internal backtest runner for a given version
+function _runBacktest(data, n, version) {
   const results = [];
+  const patternNames = ['ホット頻度', '逆張り回帰', 'マルコフ連鎖', '数論バランス', 'アンサンブルAI'];
+
   for (let i = 0; i < n; i++) {
-    // Use data up to (but not including) the target draw
     const targetIdx = data.length - 1 - i;
+    if (targetIdx < 50) break;
     const target = data[targetIdx];
     const trainingData = data.slice(0, targetIdx);
-
-    // Generate predictions using training data
-    const targetDate = new Date(target.d + 'T00:00:00');
     const dateStr = target.d;
+    const targetDay = new Date(target.d + 'T00:00:00').getDay();
 
-    const patternFns = [
-      (d,r) => predictPattern1(d,r),
-      (d,r) => predictPattern2(d,r),
-      (d,r) => predictPattern3(d,r),
-      (d,r) => predictPattern4(d,r),
-      (d,r) => predictPattern5(d,r,[1,1,1,1]),
-    ];
-    const patternNames = ['ホット頻度', '逆張り回帰', 'マルコフ連鎖', '数論バランス', 'アンサンブルAI'];
+    let patternFns;
+    if (version === 'v3') {
+      patternFns = [
+        (d,r) => predictPattern1(d,r,targetDay),
+        (d,r) => predictPattern2(d,r,targetDay),
+        (d,r) => predictPattern3(d,r,targetDay),
+        (d,r) => predictPattern4(d,r,targetDay),
+        (d,r) => predictPattern5(d,r,[1,1,1,1],targetDay),
+      ];
+    } else {
+      // v1 style: simple frequency-based (no Monte Carlo enhancements, simplified)
+      patternFns = [
+        (d,r) => { const f=calcFrequency(d,50);const s=[];for(let i=1;i<=43;i++)s.push({n:i,score:f[i]+r()*2});s.sort((a,b)=>b.score-a.score);return{numbers:s.slice(0,6).map(x=>x.n).sort((a,b)=>a-b),bonus:s[6].n}; },
+        (d,r) => { const iv=calcIntervals(d);const s=[];for(let i=1;i<=43;i++)s.push({n:i,score:iv[i].since/Math.max(iv[i].avg,1)+r()*2});s.sort((a,b)=>b.score-a.score);return{numbers:s.slice(0,6).map(x=>x.n).sort((a,b)=>a-b),bonus:s[6].n}; },
+        (d,r) => { const f=calcFrequency(d,30);const s=[];for(let i=1;i<=43;i++)s.push({n:i,score:f[i]+r()*3});s.sort((a,b)=>b.score-a.score);return{numbers:s.slice(0,6).map(x=>x.n).sort((a,b)=>a-b),bonus:s[6].n}; },
+        (d,r) => { const f=calcFrequency(d,100);const s=[];for(let i=1;i<=43;i++)s.push({n:i,score:f[i]+r()*2});s.sort((a,b)=>b.score-a.score);return{numbers:s.slice(0,6).map(x=>x.n).sort((a,b)=>a-b),bonus:s[6].n}; },
+        (d,r) => { const f=calcFrequency(d,null);const s=[];for(let i=1;i<=43;i++)s.push({n:i,score:f[i]+r()*2});s.sort((a,b)=>b.score-a.score);return{numbers:s.slice(0,6).map(x=>x.n).sort((a,b)=>a-b),bonus:s[6].n}; },
+      ];
+    }
 
     const drawResult = { round: target.id, date: target.d, actual: target.n, bonus: target.b, patterns: [] };
 
     for (let p = 0; p < 5; p++) {
-      const seed = dateStr + '_backtest_pattern' + p;
+      const seed = dateStr + '_backtest_' + version + '_pattern' + p;
       const rng = seededRandom(seed);
       for (let j = 0; j < 10; j++) rng();
+      // Clear analysis cache for each training set
+      if (version === 'v3') {
+        _analysisCache.pairCorr = null;
+        _analysisCache.entropyRange = null;
+        _analysisCache.periodicities = null;
+      }
       const result = patternFns[p](trainingData, rng);
       const hits = result.numbers.filter(num => target.n.includes(num));
       drawResult.patterns.push({ name: patternNames[p], numbers: result.numbers, hits: hits.length, matched: hits });
     }
-
     results.push(drawResult);
-
-    console.log(`第${target.id}回 (${target.d}) 当選: [${target.n.join(',')}] B:${target.b}`);
-    for (const p of drawResult.patterns) {
-      const hitMark = p.hits >= 3 ? ' ★' : '';
-      console.log(`  ${p.name}: [${p.numbers.join(',')}] → ${p.hits}個一致 ${p.matched.length > 0 ? '(' + p.matched.join(',') + ')' : ''}${hitMark}`);
-    }
-    console.log('');
   }
+  return results;
+}
 
-  // Summary
-  console.log('=== SUMMARY ===');
+function _summarizeBacktest(results, label) {
+  const n = results.length;
+  const patternNames = ['ホット頻度', '逆張り回帰', 'マルコフ連鎖', '数論バランス', 'アンサンブルAI'];
   const patternTotals = [0,0,0,0,0];
   const patternMax = [0,0,0,0,0];
-  const patternNames = ['ホット頻度', '逆張り回帰', 'マルコフ連鎖', '数論バランス', 'アンサンブルAI'];
+  const patternHitDists = [[],[],[],[],[]];
+  const bestPatternCounts = [0,0,0,0,0];
+
   for (const r of results) {
+    let bestHits = -1, bestIdx = 0;
     for (let p = 0; p < 5; p++) {
       patternTotals[p] += r.patterns[p].hits;
       patternMax[p] = Math.max(patternMax[p], r.patterns[p].hits);
+      patternHitDists[p].push(r.patterns[p].hits);
+      if (r.patterns[p].hits > bestHits) { bestHits = r.patterns[p].hits; bestIdx = p; }
     }
-  }
-  for (let p = 0; p < 5; p++) {
-    console.log(`${patternNames[p]}: 平均 ${(patternTotals[p]/n).toFixed(2)}個一致, 最高 ${patternMax[p]}個`);
+    bestPatternCounts[bestIdx]++;
   }
 
+  console.log(`\n=== ${label} (${n}回) ===`);
+  for (let p = 0; p < 5; p++) {
+    console.log(`${patternNames[p]}: 平均 ${(patternTotals[p]/n).toFixed(2)}個一致, 最高 ${patternMax[p]}個, 最善${bestPatternCounts[p]}回`);
+  }
   const overallAvg = patternTotals.reduce((a,b)=>a+b,0) / (n*5);
   console.log(`全体平均: ${overallAvg.toFixed(2)}個一致`);
 
-  // Distribution of hit counts
+  // Hit distribution histogram
   const hitDist = {};
   for (const r of results) {
     for (const p of r.patterns) {
@@ -3151,10 +2930,83 @@ window.__backtest = function(n) {
   }
   console.log('一致数分布:');
   for (let h = 0; h <= 6; h++) {
-    if (hitDist[h]) console.log(`  ${h}個: ${hitDist[h]}回 (${(hitDist[h]/(n*5)*100).toFixed(1)}%)`);
+    if (hitDist[h]) {
+      const bar = '█'.repeat(Math.round(hitDist[h]/(n*5)*50));
+      console.log(`  ${h}個: ${hitDist[h]}回 (${(hitDist[h]/(n*5)*100).toFixed(1)}%) ${bar}`);
+    }
   }
 
-  return results;
+  // Best pattern statistics
+  console.log('最善パターン統計:');
+  for (let p = 0; p < 5; p++) {
+    console.log(`  ${patternNames[p]}: ${bestPatternCounts[p]}回 (${(bestPatternCounts[p]/n*100).toFixed(1)}%)`);
+  }
+
+  return { patternTotals, patternMax, overallAvg, hitDist, bestPatternCounts, n };
+}
+
+window.__backtest = function(n) {
+  n = n || 10;
+  const data = getAllData();
+  if (data.length < n + 50) {
+    console.log('Not enough data for backtest. Need at least ' + (n+50) + ' draws.');
+    return;
+  }
+
+  console.log('╔══════════════════════════════════════════╗');
+  console.log('║       LOTO6 BACKTEST v3 (Enhanced)       ║');
+  console.log('╚══════════════════════════════════════════╝');
+
+  // Run v1 (simple) and v3 (enhanced) backtests
+  console.log('\n--- Running v1 (simple baseline)... ---');
+  const v1Results = _runBacktest(data, n, 'v1');
+  const v1Summary = _summarizeBacktest(v1Results, 'v1 (Simple Baseline)');
+
+  // Clear cache before v3 run
+  _analysisCache.pairCorr = null;
+  _analysisCache.entropyRange = null;
+  _analysisCache.periodicities = null;
+
+  console.log('\n--- Running v3 (enhanced with all improvements)... ---');
+  const v3Results = _runBacktest(data, n, 'v3');
+  const v3Summary = _summarizeBacktest(v3Results, 'v3 (Enhanced)');
+
+  // Comparison
+  console.log('\n=== V1 vs V3 比較 ===');
+  console.log(`全体平均: v1=${v1Summary.overallAvg.toFixed(2)} → v3=${v3Summary.overallAvg.toFixed(2)} (${v3Summary.overallAvg>v1Summary.overallAvg?'+':''}${(v3Summary.overallAvg-v1Summary.overallAvg).toFixed(2)})`);
+  const patternNames = ['ホット頻度', '逆張り回帰', 'マルコフ連鎖', '数論バランス', 'アンサンブルAI'];
+  for (let p = 0; p < 5; p++) {
+    const v1Avg = v1Summary.patternTotals[p] / v1Summary.n;
+    const v3Avg = v3Summary.patternTotals[p] / v3Summary.n;
+    const diff = v3Avg - v1Avg;
+    console.log(`  ${patternNames[p]}: v1=${v1Avg.toFixed(2)} → v3=${v3Avg.toFixed(2)} (${diff>0?'+':''}${diff.toFixed(2)})`);
+  }
+
+  // Multi-range backtest
+  const ranges = [20, 50, 100].filter(r => data.length >= r + 50);
+  if (ranges.length > 0) {
+    console.log('\n=== 期間別バックテスト (v3) ===');
+    for (const range of ranges) {
+      _analysisCache.pairCorr = null;
+      _analysisCache.entropyRange = null;
+      _analysisCache.periodicities = null;
+      const rangeResults = _runBacktest(data, range, 'v3');
+      _summarizeBacktest(rangeResults, `v3 直近${range}回`);
+    }
+  }
+
+  // Detail output for requested n
+  console.log('\n=== 詳細結果 (v3) ===');
+  for (const r of v3Results) {
+    console.log(`第${r.round}回 (${r.date}) 当選: [${r.actual.join(',')}] B:${r.bonus}`);
+    for (const p of r.patterns) {
+      const hitMark = p.hits >= 3 ? ' ★' : '';
+      console.log(`  ${p.name}: [${p.numbers.join(',')}] → ${p.hits}個一致 ${p.matched.length > 0 ? '(' + p.matched.join(',') + ')' : ''}${hitMark}`);
+    }
+    console.log('');
+  }
+
+  return { v1: v1Results, v3: v3Results, v1Summary, v3Summary };
 };
 
 // === INITIALIZATION ===
