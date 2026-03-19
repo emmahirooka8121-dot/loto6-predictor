@@ -1,4 +1,4 @@
-/* ===== Statistical Analysis Engine ===== */
+/* ===== Statistical Analysis Engine (v2.0 - Enhanced) ===== */
 
 const Analyzer = (() => {
   const NUM_RANGE = Array.from({length: 43}, (_, i) => i + 1);
@@ -110,7 +110,6 @@ const Analyzer = (() => {
     if (!data.length) return {};
     const latestId = data[0].id;
     const lastSeen = {};
-    // data is sorted newest first
     for (let i = data.length - 1; i >= 0; i--) {
       data[i].nums.forEach(n => lastSeen[n] = data[i].id);
     }
@@ -167,6 +166,65 @@ const Analyzer = (() => {
     return result;
   }
 
+  // NEW: Gap analysis
+  function calcGapStats(data) {
+    const allGaps = [];
+    let consecDraws = 0;
+    let tripleConsecDraws = 0;
+    data.forEach(draw => {
+      const nums = [...draw.nums].sort((a,b) => a-b);
+      const gaps = nums.slice(1).map((n,i) => n - nums[i]);
+      allGaps.push(...gaps);
+      let hasConsec = false, hasTriple = false;
+      for (let i = 0; i < gaps.length; i++) {
+        if (gaps[i] === 1) {
+          hasConsec = true;
+          if (i < gaps.length-1 && gaps[i+1] === 1) hasTriple = true;
+        }
+      }
+      if (hasConsec) consecDraws++;
+      if (hasTriple) tripleConsecDraws++;
+    });
+    const gapMean = allGaps.reduce((a,b)=>a+b,0)/allGaps.length;
+    const gapStd = Math.sqrt(allGaps.reduce((a,v)=>a+(v-gapMean)**2,0)/allGaps.length);
+    return { gapMean, gapStd, consecRate: consecDraws/data.length, tripleConsecRate: tripleConsecDraws/data.length, allGaps };
+  }
+
+  // NEW: 5-zone distribution
+  function calcZoneDistribution(data) {
+    const patterns = {};
+    data.forEach(draw => {
+      const z = [0,0,0,0,0];
+      draw.nums.forEach(n => {
+        if (n<=9) z[0]++; else if (n<=18) z[1]++; else if (n<=27) z[2]++;
+        else if (n<=36) z[3]++; else z[4]++;
+      });
+      const key = z.join('-');
+      patterns[key] = (patterns[key]||0) + 1;
+    });
+    return Object.entries(patterns).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  }
+
+  // NEW: Last digit distribution
+  function calcLastDigitStats(data) {
+    const digitCounts = new Array(10).fill(0);
+    data.forEach(draw => draw.nums.forEach(n => digitCounts[n%10]++));
+    return digitCounts;
+  }
+
+  // NEW: Carryover analysis
+  function calcCarryoverStats(data) {
+    const distribution = new Array(7).fill(0);
+    let bonusCount = 0;
+    for (let i = 1; i < data.length; i++) {
+      const prev = new Set(data[i-1].nums);
+      const carry = data[i].nums.filter(n => prev.has(n)).length;
+      distribution[carry]++;
+      if (data[i].nums.includes(data[i-1].bonus)) bonusCount++;
+    }
+    return { distribution, bonusAppearRate: data.length > 1 ? bonusCount/(data.length-1) : 0 };
+  }
+
   function fullAnalysis(data, lastN) {
     const d = _slice(data, lastN);
     return {
@@ -180,12 +238,17 @@ const Analyzer = (() => {
       correlation: calcCorrelation(d),
       weekdayTrend: calcWeekdayTrend(d),
       movingAvg: calcMovingAvg(d),
+      gapStats: calcGapStats(d),
+      zoneDistribution: calcZoneDistribution(d),
+      lastDigitStats: calcLastDigitStats(d),
+      carryoverStats: calcCarryoverStats(d),
     };
   }
 
   return {
     calcFrequency, calcOddEven, calcRangeDistribution, calcSumStats,
     calcConsecutive, calcDormancy, calcCorrelation, calcWeekdayTrend,
-    calcMovingAvg, fullAnalysis,
+    calcMovingAvg, calcGapStats, calcZoneDistribution, calcLastDigitStats,
+    calcCarryoverStats, fullAnalysis,
   };
 })();

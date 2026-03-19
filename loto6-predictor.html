@@ -462,6 +462,8 @@ body {
     <div class="chart-container mb-16"><canvas id="zonalChart"></canvas></div>
     <div class="chart-container mb-16"><canvas id="sumChart"></canvas></div>
     <div class="chart-container"><canvas id="consChart"></canvas></div>
+    <div class="chart-container mb-16"><canvas id="gapChart"></canvas></div>
+    <div class="chart-container"><canvas id="consecTrendChart"></canvas></div>
   </div>
 </div>
 
@@ -553,14 +555,18 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v1.0.0</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v2.0.0</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム:<br>
-      1. 頻度分析型（ラプラスの確率論）<br>
-      2. 出現間隔型（ベルヌーイの大数の法則）<br>
-      3. マルコフ連鎖型（マルコフの確率過程論）<br>
-      4. 数論型（フィボナッチ＋ガウス分布）<br>
-      5. アンサンブル統合型（ベイズ推定＋ゲーム理論）
+      搭載アルゴリズム (v2.0):<br>
+      1. ホット頻度型（動的ウィンドウ＋モンテカルロ）<br>
+      2. 逆張り回帰型（平均回帰＋乖離率分析）<br>
+      3. マルコフ連鎖型（遷移確率＋ギャップ分析）<br>
+      4. 数論バランス型（フィボナッチ＋5ゾーン均等）<br>
+      5. アンサンブルAI型（ベイズ統合＋モンテカルロ最適化）<br>
+      <br>
+      新機能: パターン間多様性制御、モンテカルロ最適化、<br>
+      ギャップ分析、合計値帯最適化、動的ウィンドウ、<br>
+      5ゾーンバランス、末尾数字分散、クーリング除外
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -797,21 +803,114 @@ function calcIntervals(data) {
     const arr = intervals[n];
     const avg = arr.length > 0 ? arr.reduce((a,b)=>a+b,0)/arr.length : data.length;
     const sinceLast = data.length - 1 - (lastSeen[n] >= 0 ? lastSeen[n] : -1);
-    result[n] = { avg: Math.round(avg*10)/10, since: sinceLast, overdue: sinceLast > avg * 1.5 };
+    const std = arr.length > 1 ? Math.sqrt(arr.reduce((a,v)=>a+(v-avg)**2,0)/arr.length) : avg;
+    const cv = avg > 0 ? std / avg : 1;
+    result[n] = { avg: Math.round(avg*10)/10, since: sinceLast, overdue: sinceLast > avg * 1.5, std, cv };
   }
   return result;
 }
 
 function calcSumStats(data) {
   const sums = data.map(d => d.n.reduce((a,b)=>a+b,0));
-  sums.sort((a,b)=>a-b);
-  const p10 = sums[Math.floor(sums.length*0.1)];
-  const p90 = sums[Math.floor(sums.length*0.9)];
+  const sorted = [...sums].sort((a,b)=>a-b);
+  const p10 = sorted[Math.floor(sorted.length*0.1)];
+  const p90 = sorted[Math.floor(sorted.length*0.9)];
   const mean = sums.reduce((a,b)=>a+b,0)/sums.length;
-  return { sums, p10, p90, mean };
+  const variance = sums.reduce((a,s)=>a+(s-mean)**2,0)/sums.length;
+  const std = Math.sqrt(variance);
+  return { sums, sorted, p10, p90, mean, std };
 }
 
-// Moving average
+// Gap analysis: intervals between adjacent sorted numbers
+function calcGapStats(data) {
+  const allGaps = [];
+  let consecDraws = 0;
+  let tripleConsecDraws = 0;
+  const consecPositions = { low: 0, mid: 0, high: 0 };
+  for (const d of data) {
+    const nums = [...d.n].sort((a,b)=>a-b);
+    const gaps = nums.slice(1).map((n,i) => n - nums[i]);
+    allGaps.push(...gaps);
+    let hasConsec = false, hasTriple = false;
+    for (let i = 0; i < gaps.length; i++) {
+      if (gaps[i] === 1) {
+        hasConsec = true;
+        const pos = nums[i];
+        if (pos <= 14) consecPositions.low++;
+        else if (pos <= 28) consecPositions.mid++;
+        else consecPositions.high++;
+        if (i < gaps.length-1 && gaps[i+1] === 1) hasTriple = true;
+      }
+    }
+    if (hasConsec) consecDraws++;
+    if (hasTriple) tripleConsecDraws++;
+  }
+  const gapMean = allGaps.reduce((a,b)=>a+b,0)/allGaps.length;
+  const gapStd = Math.sqrt(allGaps.reduce((a,v)=>a+(v-gapMean)**2,0)/allGaps.length);
+  const bigGapRate = allGaps.filter(g=>g>=10).length / allGaps.length;
+  const consecRate = consecDraws / data.length;
+  const tripleConsecRate = tripleConsecDraws / data.length;
+  return { gapMean, gapStd, bigGapRate, consecRate, tripleConsecRate, consecPositions, allGaps };
+}
+
+// 5-zone distribution analysis
+function calcZoneDistribution(data) {
+  const zones = [0,0,0,0,0]; // 1-9, 10-18, 19-27, 28-36, 37-43
+  const patterns = {};
+  for (const d of data) {
+    const z = [0,0,0,0,0];
+    for (const n of d.n) {
+      if (n<=9) { zones[0]++; z[0]++; }
+      else if (n<=18) { zones[1]++; z[1]++; }
+      else if (n<=27) { zones[2]++; z[2]++; }
+      else if (n<=36) { zones[3]++; z[3]++; }
+      else { zones[4]++; z[4]++; }
+    }
+    const key = z.join('-');
+    patterns[key] = (patterns[key]||0) + 1;
+  }
+  const topPatterns = Object.entries(patterns).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  return { zones, topPatterns, total: data.length };
+}
+
+// Last digit distribution analysis
+function calcLastDigitStats(data) {
+  const digitCounts = new Array(10).fill(0);
+  for (const d of data) {
+    for (const n of d.n) digitCounts[n % 10]++;
+  }
+  return digitCounts;
+}
+
+// Carryover analysis: how many numbers from prev draw appear in next
+function calcCarryoverStats(data) {
+  const carryCounts = [];
+  const bonusAppearRate = { count: 0, total: 0 };
+  for (let i = 1; i < data.length; i++) {
+    const prev = new Set(data[i-1].n);
+    const curr = data[i].n;
+    const carry = curr.filter(n => prev.has(n)).length;
+    carryCounts.push(carry);
+    bonusAppearRate.total++;
+    if (curr.includes(data[i-1].b)) bonusAppearRate.count++;
+  }
+  const distribution = new Array(7).fill(0);
+  for (const c of carryCounts) distribution[c]++;
+  return { distribution, bonusAppearRate: bonusAppearRate.count / bonusAppearRate.total, carryCounts };
+}
+
+// Dynamic window size per number based on CV
+function calcDynamicWindow(data, n) {
+  const intervals = calcIntervals(data);
+  const iv = intervals[n];
+  const cv = iv.cv;
+  // Low CV = stable cycle -> longer window; High CV = volatile -> shorter window
+  const minW = 20, maxW = Math.min(200, data.length);
+  const w = Math.round(minW + (maxW - minW) * (1 - Math.min(cv, 2) / 2));
+  return Math.max(minW, Math.min(maxW, w));
+}
+
+// Moving average with dynamic window support
 function movingAvg(data, n, window) {
   const freq = new Array(44).fill(0);
   const result = new Array(44).fill(0);
@@ -828,177 +927,354 @@ function movingAvg(data, n, window) {
   return { freq, trend: result };
 }
 
-// === PREDICTION ALGORITHMS ===
-
-// Pattern 1: Frequency Analysis (Hot Number)
-function predictPattern1(data, rng) {
-  const { freq, trend } = movingAvg(data, 0, 50);
-  const scores = [];
-  for (let i = 1; i <= 43; i++) {
-    scores.push({ n: i, score: freq[i] * 2 + Math.max(0, trend[i]) * 3 + rng() * 2 });
+// Dynamic frequency using per-number optimal windows
+function calcDynamicFrequency(data) {
+  const dynFreq = new Array(44).fill(0);
+  for (let n = 1; n <= 43; n++) {
+    const w = calcDynamicWindow(data, n);
+    const subset = data.slice(-w);
+    let count = 0;
+    for (const d of subset) { if (d.n.includes(n)) count++; }
+    dynFreq[n] = count / subset.length;
   }
-  scores.sort((a,b) => b.score - a.score);
-  return balancedSelect(scores, rng, data);
+  return dynFreq;
 }
 
-// Pattern 2: Interval Analysis (Cold Number)
+// === PREDICTION ALGORITHMS (v2 - Enhanced) ===
+
+// Scoring function for Monte Carlo: evaluates a combination against historical stats
+function scoreCombination(combo, data, gapStats, sumStats, zoneStats, lastDigitStats, gapStatsObj) {
+  let score = 0;
+  const sorted = [...combo].sort((a,b)=>a-b);
+
+  // 1. Sum score: closer to mean = better
+  const sum = sorted.reduce((a,b)=>a+b,0);
+  const sumDev = Math.abs(sum - sumStats.mean) / sumStats.std;
+  if (sumDev <= 1) score += 10 * (1 - sumDev);
+  else score -= sumDev * 2;
+
+  // 2. Gap distribution similarity
+  const gaps = sorted.slice(1).map((n,i) => n - sorted[i]);
+  const myGapMean = gaps.reduce((a,b)=>a+b,0)/gaps.length;
+  const gapDiff = Math.abs(myGapMean - gapStats.gapMean) / gapStats.gapStd;
+  score += Math.max(0, 5 - gapDiff * 2);
+
+  // 3. Consecutive pattern match
+  const hasConsec = gaps.some(g=>g===1);
+  const hasTriple = gaps.some((g,i)=>g===1 && i<gaps.length-1 && gaps[i+1]===1);
+  if (gapStats.consecRate > 0.4 && hasConsec) score += 3;
+  if (gapStats.consecRate <= 0.4 && !hasConsec) score += 2;
+  if (hasTriple && gapStats.tripleConsecRate < 0.05) score -= 3;
+
+  // 4. Zone balance (5 zones)
+  const zones = [0,0,0,0,0];
+  for (const n of sorted) {
+    if (n<=9) zones[0]++;
+    else if (n<=18) zones[1]++;
+    else if (n<=27) zones[2]++;
+    else if (n<=36) zones[3]++;
+    else zones[4]++;
+  }
+  const filledZones = zones.filter(z=>z>0).length;
+  score += filledZones * 1.5;
+  if (zones.some(z=>z>3)) score -= 3;
+
+  // 5. Odd/Even balance
+  const odd = sorted.filter(n=>n%2===1).length;
+  if (odd >= 2 && odd <= 4) score += 3;
+  else if (odd === 1 || odd === 5) score += 1;
+
+  // 6. Last digit diversity
+  const lastDigits = sorted.map(n=>n%10);
+  const digitSet = new Set(lastDigits);
+  score += digitSet.size * 0.5;
+  const digitCounts = {};
+  for (const d of lastDigits) digitCounts[d] = (digitCounts[d]||0)+1;
+  if (Object.values(digitCounts).some(c=>c>2)) score -= 3;
+
+  return score;
+}
+
+// Monte Carlo selection: generates many combos and picks the best
+function monteCarloSelect(candidates, scoreFn, rng, iterations) {
+  iterations = iterations || 10000;
+  let bestCombo = null, bestScore = -Infinity;
+  for (let i = 0; i < iterations; i++) {
+    // Weighted random selection of 6 from candidates
+    const pool = [...candidates];
+    const combo = [];
+    for (let j = 0; j < 6 && pool.length > 0; j++) {
+      const totalW = pool.reduce((a,c)=>a+Math.max(c.score,0.1),0);
+      let r = rng() * totalW;
+      let picked = pool[0];
+      for (const c of pool) {
+        r -= Math.max(c.score, 0.1);
+        if (r <= 0) { picked = c; break; }
+      }
+      combo.push(picked.n);
+      pool.splice(pool.indexOf(picked), 1);
+    }
+    if (combo.length !== 6) continue;
+    const s = scoreFn(combo);
+    if (s > bestScore) { bestScore = s; bestCombo = combo; }
+  }
+  return bestCombo ? bestCombo.sort((a,b)=>a-b) : candidates.slice(0,6).map(c=>c.n).sort((a,b)=>a-b);
+}
+
+// Exclusion logic: determine which numbers to exclude or favor based on carryover
+function calcExclusions(data) {
+  const lastDraw = data[data.length-1];
+  const carry = calcCarryoverStats(data);
+  // Most common carryover count
+  const dist = carry.distribution;
+  let bestCarry = 0, bestCount = 0;
+  for (let i = 0; i <= 6; i++) { if (dist[i] > bestCount) { bestCount = dist[i]; bestCarry = i; } }
+
+  // Cooling: numbers appearing in 3+ of last 5 draws get penalized
+  const recent5 = data.slice(-5);
+  const recentFreq = new Array(44).fill(0);
+  for (const d of recent5) for (const n of d.n) recentFreq[n]++;
+  const coolingNums = new Set();
+  for (let n = 1; n <= 43; n++) { if (recentFreq[n] >= 3) coolingNums.add(n); }
+
+  return { lastDraw, expectedCarry: bestCarry, bonusAppearRate: carry.bonusAppearRate, coolingNums };
+}
+
+// Build scoring function that includes all constraints for a specific pattern
+function buildScoreFn(data, patternIdx, sumTarget) {
+  const gapStats = calcGapStats(data);
+  const sumStats = calcSumStats(data);
+  const zoneStats = calcZoneDistribution(data);
+  const lastDigitStats = calcLastDigitStats(data);
+
+  // Sum target bands per pattern
+  const bands = [
+    { lo: sumStats.mean - sumStats.std, hi: sumStats.mean - 0.5*sumStats.std },      // P1: low
+    { lo: sumStats.mean - 0.5*sumStats.std, hi: sumStats.mean },                      // P2: low-mid
+    { lo: sumStats.mean, hi: sumStats.mean + 0.5*sumStats.std },                      // P3: mid-high
+    { lo: sumStats.mean + 0.5*sumStats.std, hi: sumStats.mean + sumStats.std },        // P4: high
+    { lo: sumStats.mean - 0.3*sumStats.std, hi: sumStats.mean + 0.3*sumStats.std },    // P5: center
+  ];
+  const band = bands[patternIdx];
+
+  // Gravity center targets
+  const gravityTargets = [
+    { lo: 15, hi: 18 },
+    { lo: 19, hi: 22 },
+    { lo: 23, hi: 26 },
+    null, // free
+    null, // free
+  ];
+  const gravTarget = gravityTargets[patternIdx];
+
+  return function(combo) {
+    let s = scoreCombination(combo, data, gapStats, sumStats, zoneStats, lastDigitStats);
+    const sum = combo.reduce((a,b)=>a+b,0);
+
+    // Sum band bonus
+    if (sum >= band.lo && sum <= band.hi) s += 8;
+    else { const dist = Math.min(Math.abs(sum-band.lo), Math.abs(sum-band.hi)); s -= dist * 0.2; }
+
+    // Gravity center constraint
+    if (gravTarget) {
+      const gravity = sum / 6;
+      if (gravity >= gravTarget.lo && gravity <= gravTarget.hi) s += 5;
+      else s -= Math.abs(gravity - (gravTarget.lo+gravTarget.hi)/2) * 0.5;
+    }
+
+    return s;
+  };
+}
+
+// Pattern 1: Hot Numbers + Dynamic Window + Monte Carlo
+function predictPattern1(data, rng) {
+  const dynFreq = calcDynamicFrequency(data);
+  const { freq, trend } = movingAvg(data, 0, 50);
+  const excl = calcExclusions(data);
+  const scores = [];
+  for (let i = 1; i <= 43; i++) {
+    let score = dynFreq[i] * 20 + freq[i] * 2 + Math.max(0, trend[i]) * 3;
+    if (excl.coolingNums.has(i)) score *= 0.6;
+    score += rng() * 2;
+    scores.push({ n: i, score });
+  }
+  scores.sort((a,b) => b.score - a.score);
+  const scoreFn = buildScoreFn(data, 0);
+  const numbers = monteCarloSelect(scores.slice(0, 25), scoreFn, rng, 8000);
+  const remaining = scores.filter(s => !numbers.includes(s.n));
+  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  return { numbers, bonus };
+}
+
+// Pattern 2: Enhanced Contrarian (Regression to Mean) + Monte Carlo
 function predictPattern2(data, rng) {
   const intervals = calcIntervals(data);
+  const totalDraws = data.length;
+  const theoreticalRate = 6/43;
+  const freq = calcFrequency(data, null);
+  const excl = calcExclusions(data);
+
   const scores = [];
   for (let i = 1; i <= 43; i++) {
     const iv = intervals[i];
+    const actualRate = freq[i] / totalDraws;
+    const deviationRate = (theoreticalRate - actualRate) / theoreticalRate;
     const overdueRatio = iv.since / Math.max(iv.avg, 1);
-    scores.push({ n: i, score: overdueRatio * 5 + (iv.overdue ? 10 : 0) + rng() * 2 });
+    // Regression pressure: higher when overdue ratio > 2
+    const regressionPressure = overdueRatio > 2 ? (overdueRatio - 1) * 3 : overdueRatio;
+    let score = regressionPressure * 4 + Math.max(0, deviationRate) * 15 + (iv.overdue ? 8 : 0);
+    // Penalize structurally rare numbers (very low overall freq AND low interval avg)
+    if (actualRate < theoreticalRate * 0.5 && iv.avg > 15) score *= 0.5;
+    if (excl.coolingNums.has(i)) score *= 0.7;
+    score += rng() * 2;
+    scores.push({ n: i, score });
   }
   scores.sort((a,b) => b.score - a.score);
-  return balancedSelect(scores, rng, data);
+  const scoreFn = buildScoreFn(data, 1);
+  const numbers = monteCarloSelect(scores.slice(0, 25), scoreFn, rng, 8000);
+  const remaining = scores.filter(s => !numbers.includes(s.n));
+  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  return { numbers, bonus };
 }
 
-// Pattern 3: Poisson + Markov Chain
+// Pattern 3: Markov Chain + Poisson + Gap Analysis + Monte Carlo
 function predictPattern3(data, rng) {
-  // Poisson parameter for each number
-  const lambda = 6/43; // theoretical probability
-  const totalDraws = data.length;
-
-  // Markov transition: P(number appears | previous draw)
+  const lambda = 6/43;
   const transition = new Array(44).fill(0).map(() => new Array(44).fill(0));
   for (let i = 1; i < data.length; i++) {
     for (const prev of data[i-1].n) {
-      for (const curr of data[i].n) {
-        transition[prev][curr]++;
-      }
+      for (const curr of data[i].n) transition[prev][curr]++;
     }
   }
-
-  // Normalize
   for (let i = 1; i <= 43; i++) {
-    const sum = transition[i].reduce((a,b) => a+b, 0);
-    if (sum > 0) for (let j = 1; j <= 43; j++) transition[i][j] /= sum;
+    const sum = transition[i].reduce((a,b)=>a+b,0);
+    if (sum > 0) for (let j=1;j<=43;j++) transition[i][j] /= sum;
   }
 
   const lastDraw = data[data.length-1].n;
   const prevDraw = data.length > 1 ? data[data.length-2].n : lastDraw;
+  const excl = calcExclusions(data);
+  const freq50 = calcFrequency(data, 50);
+  const gapStats = calcGapStats(data);
 
   const scores = [];
   for (let n = 1; n <= 43; n++) {
     let markovScore = 0;
     for (const prev of lastDraw) markovScore += transition[prev][n] * 2;
     for (const prev of prevDraw) markovScore += transition[prev][n];
-
-    // Poisson component
-    const freq50 = calcFrequency(data, 50);
     const observed = freq50[n] / 50;
     const poissonScore = Math.abs(observed - lambda) < 0.02 ? 3 : observed > lambda ? 2 : 1;
-
-    // Consecutive pair bonus
-    let consBonus = 0;
-    if (n > 1 && lastDraw.includes(n-1)) consBonus += 1;
-    if (n < 43 && lastDraw.includes(n+1)) consBonus += 1;
-
-    scores.push({ n, score: markovScore * 5 + poissonScore + consBonus + rng() * 2 });
-  }
-  scores.sort((a,b) => b.score - a.score);
-  return balancedSelect(scores, rng, data);
-}
-
-// Pattern 4: Number Theory (Fibonacci + Golden Ratio + Gauss)
-function predictPattern4(data, rng) {
-  const fibs = [1,2,3,5,8,13,21,34];
-  const primes = [2,3,5,7,11,13,17,19,23,29,31,37,41,43];
-  const triangulars = [1,3,6,10,15,21,28,36];
-  const perfects = [6,28];
-
-  const phi = 1.618033988749895;
-  const { sums, mean } = calcSumStats(data);
-
-  const scores = [];
-  for (let n = 1; n <= 43; n++) {
-    let score = 0;
-    if (fibs.includes(n)) score += 3;
-    if (primes.includes(n)) score += 2;
-    if (triangulars.includes(n)) score += 2;
-    if (perfects.includes(n)) score += 3;
-
-    // Golden ratio spacing - prefer numbers near phi multiples
-    const phiDist = Math.min(...[1,2,3,4,5].map(k => Math.abs(n - Math.round(phi * k * 5.3))));
-    score += Math.max(0, 5 - phiDist);
-
-    // Gauss: prefer numbers near center (22)
-    const gaussScore = Math.exp(-Math.pow(n - 22, 2) / (2 * 100));
-    score += gaussScore * 3;
-
-    // Frequency from data
-    const freq = calcFrequency(data, 100);
-    score += freq[n] / 10;
-
+    let score = markovScore * 5 + poissonScore;
+    // Carryover logic
+    if (lastDraw.includes(n) && rng() < excl.expectedCarry / 6) score += 5;
+    // Bonus appear in next draw
+    if (n === excl.lastDraw.b && rng() < excl.bonusAppearRate) score += 3;
+    if (excl.coolingNums.has(n)) score *= 0.7;
     score += rng() * 2;
     scores.push({ n, score });
   }
   scores.sort((a,b) => b.score - a.score);
-
-  // Select with sum constraint
-  const selected = balancedSelect(scores, rng, data);
-  return selected;
+  const scoreFn = buildScoreFn(data, 2);
+  const numbers = monteCarloSelect(scores.slice(0, 25), scoreFn, rng, 8000);
+  const remaining = scores.filter(s => !numbers.includes(s.n));
+  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  return { numbers, bonus };
 }
 
-// Pattern 5: Ensemble (Bayesian + Game Theory)
+// Pattern 4: Number Theory + Zone Balance + Monte Carlo (free gravity)
+function predictPattern4(data, rng) {
+  const fibs = new Set([1,2,3,5,8,13,21,34]);
+  const primes = new Set([2,3,5,7,11,13,17,19,23,29,31,37,41,43]);
+  const triangulars = new Set([1,3,6,10,15,21,28,36]);
+  const phi = 1.618033988749895;
+  const freq100 = calcFrequency(data, 100);
+  const excl = calcExclusions(data);
+  const dynFreq = calcDynamicFrequency(data);
+
+  const scores = [];
+  for (let n = 1; n <= 43; n++) {
+    let score = 0;
+    if (fibs.has(n)) score += 3;
+    if (primes.has(n)) score += 2;
+    if (triangulars.has(n)) score += 2;
+    const phiDist = Math.min(...[1,2,3,4,5].map(k => Math.abs(n - Math.round(phi * k * 5.3))));
+    score += Math.max(0, 5 - phiDist);
+    score += Math.exp(-Math.pow(n-22,2)/(2*100)) * 3;
+    score += freq100[n] / 10 + dynFreq[n] * 5;
+    if (excl.coolingNums.has(n)) score *= 0.7;
+    score += rng() * 2;
+    scores.push({ n, score });
+  }
+  scores.sort((a,b) => b.score - a.score);
+  const scoreFn = buildScoreFn(data, 3);
+  const numbers = monteCarloSelect(scores.slice(0, 25), scoreFn, rng, 8000);
+  const remaining = scores.filter(s => !numbers.includes(s.n));
+  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  return { numbers, bonus };
+}
+
+// Pattern 5: Ensemble (Bayesian + All Strategies) + Monte Carlo (center gravity)
 function predictPattern5(data, rng, weights) {
   const w = weights || [1,1,1,1];
-
-  // Get scores from all patterns
-  const s1 = getScores_P1(data, rng);
-  const s2 = getScores_P2(data, rng);
-  const s3 = getScores_P3(data, rng);
-  const s4 = getScores_P4(data, rng);
+  const s1 = getScores_P1(data);
+  const s2 = getScores_P2(data);
+  const s3 = getScores_P3(data);
+  const s4 = getScores_P4(data);
+  const freq = calcFrequency(data, null);
+  const excl = calcExclusions(data);
 
   const combined = [];
   for (let n = 1; n <= 43; n++) {
-    // Weighted combination
     let score = s1[n]*w[0] + s2[n]*w[1] + s3[n]*w[2] + s4[n]*w[3];
-
-    // Bayesian prior: overall frequency as prior
-    const freq = calcFrequency(data, null);
     const prior = freq[n] / data.length;
     const likelihood = score / 40;
-    const posterior = prior * likelihood;
-    score = posterior * 100;
-
-    // Game theory: penalize popular numbers (1-12, multiples of 7)
+    score = prior * likelihood * 100;
     if (n <= 12) score *= 0.9;
     if (n % 7 === 0) score *= 0.95;
-    // Favor less popular numbers for higher expected value
     if (n > 30) score *= 1.05;
-
+    if (excl.coolingNums.has(n)) score *= 0.7;
     score += rng() * 1.5;
     combined.push({ n, score });
   }
   combined.sort((a,b) => b.score - a.score);
-  return balancedSelect(combined, rng, data);
+  const scoreFn = buildScoreFn(data, 4);
+  const numbers = monteCarloSelect(combined.slice(0, 25), scoreFn, rng, 10000);
+  const remaining = combined.filter(s => !numbers.includes(s.n));
+  const bonus = remaining.length > 0 ? remaining[Math.floor(rng()*Math.min(5,remaining.length))].n : 1;
+  return { numbers, bonus };
 }
 
 // Helper: Get raw scores for ensemble
-function getScores_P1(data, rng) {
+function getScores_P1(data) {
   const { freq, trend } = movingAvg(data, 0, 50);
+  const dynFreq = calcDynamicFrequency(data);
   const s = {};
-  for (let i=1;i<=43;i++) s[i] = freq[i]*2 + Math.max(0,trend[i])*3;
+  for (let i=1;i<=43;i++) s[i] = freq[i]*2 + Math.max(0,trend[i])*3 + dynFreq[i]*10;
   return s;
 }
-function getScores_P2(data, rng) {
+function getScores_P2(data) {
   const intervals = calcIntervals(data);
+  const totalDraws = data.length;
+  const theoreticalRate = 6/43;
+  const freq = calcFrequency(data, null);
   const s = {};
   for (let i=1;i<=43;i++) {
     const iv = intervals[i];
-    s[i] = (iv.since/Math.max(iv.avg,1))*5 + (iv.overdue?10:0);
+    const actualRate = freq[i] / totalDraws;
+    const deviationRate = Math.max(0, (theoreticalRate - actualRate) / theoreticalRate);
+    const overdueRatio = iv.since / Math.max(iv.avg,1);
+    s[i] = (overdueRatio > 2 ? (overdueRatio-1)*3 : overdueRatio)*4 + deviationRate*15 + (iv.overdue?8:0);
   }
   return s;
 }
-function getScores_P3(data, rng) {
+function getScores_P3(data) {
   const freq50 = calcFrequency(data, 50);
+  const dynFreq = calcDynamicFrequency(data);
   const s = {};
-  for (let i=1;i<=43;i++) s[i] = freq50[i]*1.5;
+  for (let i=1;i<=43;i++) s[i] = freq50[i]*1.5 + dynFreq[i]*8;
   return s;
 }
-function getScores_P4(data, rng) {
+function getScores_P4(data) {
   const fibs = new Set([1,2,3,5,8,13,21,34]);
   const primes = new Set([2,3,5,7,11,13,17,19,23,29,31,37,41,43]);
   const s = {};
@@ -1008,75 +1284,7 @@ function getScores_P4(data, rng) {
   return s;
 }
 
-// Balanced selection with constraints
-function balancedSelect(scores, rng, data) {
-  const { p10, p90 } = calcSumStats(data);
-  const maxAttempts = 100;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const pool = [...scores];
-    const selected = [];
-    // Weighted random selection from top candidates
-    const topN = Math.min(20, pool.length);
-
-    while (selected.length < 6 && pool.length > 0) {
-      // Pick from top candidates with weighted probability
-      const candidates = pool.slice(0, topN);
-      const totalScore = candidates.reduce((a,c) => a + Math.max(c.score, 0.1), 0);
-      let r = rng() * totalScore;
-      let picked = candidates[0];
-      for (const c of candidates) {
-        r -= Math.max(c.score, 0.1);
-        if (r <= 0) { picked = c; break; }
-      }
-      selected.push(picked.n);
-      const idx = pool.findIndex(p => p.n === picked.n);
-      if (idx >= 0) pool.splice(idx, 1);
-    }
-
-    selected.sort((a,b) => a - b);
-
-    // Check constraints
-    const sum = selected.reduce((a,b) => a+b, 0);
-    if (sum < p10 || sum > p90) continue;
-
-    const odd = selected.filter(n => n%2===1).length;
-    if (odd < 1 || odd > 5) continue;
-
-    const low = selected.filter(n => n<=15).length;
-    const mid = selected.filter(n => n>=16&&n<=29).length;
-    const high = selected.filter(n => n>=30).length;
-    if (low===0 && mid===0 || low===0 && high===0 || mid===0 && high===0) continue;
-
-    // Check not all same tens
-    const tens = new Set(selected.map(n => Math.floor(n/10)));
-    if (tens.size < 2) continue;
-
-    // Check not duplicate of past results
-    const key = selected.join(',');
-    const isDup = data.some(d => d.n.join(',') === key);
-    if (isDup) continue;
-
-    // Select bonus number
-    const remaining = pool.filter(p => !selected.includes(p.n));
-    remaining.sort((a,b) => b.score - a.score);
-    let bonus = remaining.length > 0 ? remaining[0].n : 1;
-    // Pick from top 5 remaining
-    if (remaining.length >= 5) {
-      const top5 = remaining.slice(0, 5);
-      bonus = top5[Math.floor(rng() * top5.length)].n;
-    }
-
-    return { numbers: selected, bonus };
-  }
-
-  // Fallback: just return top 6
-  const sel = scores.slice(0,6).map(s=>s.n).sort((a,b)=>a-b);
-  const bonus = scores.find(s => !sel.includes(s.n))?.n || 1;
-  return { numbers: sel, bonus };
-}
-
-// === PREDICTION GENERATION ===
+// === PREDICTION GENERATION (v2 - with diversity enforcement) ===
 function generatePredictions(targetDate, targetRound) {
   const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}-${String(targetDate.getDate()).padStart(2,'0')}`;
 
@@ -1088,23 +1296,94 @@ function generatePredictions(targetDate, targetRound) {
   const weights = LS.get('ensembleWeights') || [1,1,1,1];
 
   const patterns = [
-    { name: '頻度分析型', icon: '🔥', method: 'ラプラスの確率論', fn: predictPattern1, desc: '' },
-    { name: '出現間隔型', icon: '❄️', method: 'ベルヌーイの大数の法則', fn: predictPattern2, desc: '' },
-    { name: 'マルコフ連鎖型', icon: '🔗', method: 'マルコフの確率過程論', fn: predictPattern3, desc: '' },
-    { name: '数論型', icon: '📐', method: 'フィボナッチ＋ガウス分布', fn: predictPattern4, desc: '' },
-    { name: 'アンサンブル型', icon: '🎯', method: 'ベイズ推定＋ゲーム理論', fn: (d,r) => predictPattern5(d,r,weights), desc: '' },
+    { name: 'ホット頻度型', icon: '🔥', method: '動的ウィンドウ＋モンテカルロ', fn: predictPattern1, desc: '' },
+    { name: '逆張り回帰型', icon: '❄️', method: '平均回帰＋乖離率分析', fn: predictPattern2, desc: '' },
+    { name: 'マルコフ連鎖型', icon: '🔗', method: 'マルコフ遷移＋ギャップ分析', fn: predictPattern3, desc: '' },
+    { name: '数論バランス型', icon: '📐', method: 'フィボナッチ＋5ゾーンバランス', fn: predictPattern4, desc: '' },
+    { name: 'アンサンブルAI型', icon: '🎯', method: 'ベイズ統合＋モンテカルロ最適化', fn: (d,r) => predictPattern5(d,r,weights), desc: '' },
   ];
 
+  // Generate initial predictions
+  const rawPredictions = [];
+  for (let i = 0; i < 5; i++) {
+    const seed = dateStr + '_pattern' + i + '_v2';
+    const rng = seededRandom(seed);
+    for (let j = 0; j < 10; j++) rng();
+    rawPredictions.push({ idx: i, result: patterns[i].fn(data, rng), rng });
+  }
+
+  // Enforce diversity: no number appears in more than 2 patterns
+  const numberCount = {};
+  for (const p of rawPredictions) {
+    for (const n of p.result.numbers) {
+      numberCount[n] = (numberCount[n] || 0) + 1;
+    }
+  }
+
+  // If diversity is violated, regenerate offending patterns
+  const overused = new Set();
+  for (const [n, c] of Object.entries(numberCount)) {
+    if (c > 2) overused.add(parseInt(n));
+  }
+
+  if (overused.size > 0) {
+    // Find which patterns to regenerate (keep the first 2 occurrences, regen the rest)
+    const numPatternMap = {};
+    for (const p of rawPredictions) {
+      for (const n of p.result.numbers) {
+        if (!numPatternMap[n]) numPatternMap[n] = [];
+        numPatternMap[n].push(p.idx);
+      }
+    }
+    const patternsToRegen = new Set();
+    for (const n of overused) {
+      const pats = numPatternMap[n];
+      for (let k = 2; k < pats.length; k++) patternsToRegen.add(pats[k]);
+    }
+
+    for (const pIdx of patternsToRegen) {
+      const usedByOthers = new Set();
+      for (let k = 0; k < 5; k++) {
+        if (k === pIdx || patternsToRegen.has(k)) continue;
+        for (const n of rawPredictions[k].result.numbers) usedByOthers.add(n);
+      }
+
+      // Regenerate with exclusions
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const seed = dateStr + '_pattern' + pIdx + '_v2_regen' + attempt;
+        const rng = seededRandom(seed);
+        for (let j = 0; j < 10; j++) rng();
+        const result = patterns[pIdx].fn(data, rng);
+
+        // Check no number appears more than 2 times across all patterns
+        let valid = true;
+        for (const n of result.numbers) {
+          let count = 0;
+          for (let k = 0; k < 5; k++) {
+            if (k === pIdx) continue;
+            if (patternsToRegen.has(k) && k > pIdx) continue;
+            if (rawPredictions[k].result.numbers.includes(n)) count++;
+          }
+          if (count >= 2) { valid = false; break; }
+        }
+        if (valid) {
+          rawPredictions[pIdx].result = result;
+          rawPredictions[pIdx].rng = rng;
+          break;
+        }
+      }
+    }
+  }
+
+  // Check coverage: at least 30 unique numbers across all 5 patterns
+  const allNumbers = new Set();
+  for (const p of rawPredictions) for (const n of p.result.numbers) allNumbers.add(n);
+
+  // Build predictions with descriptions
   const predictions = [];
   for (let i = 0; i < 5; i++) {
-    const seed = dateStr + '_pattern' + i;
-    const rng = seededRandom(seed);
-    // Advance RNG a few times for better distribution
-    for (let j = 0; j < 10; j++) rng();
-
-    const result = patterns[i].fn(data, rng);
+    const result = rawPredictions[i].result;
     const desc = generateDescription(i, result, data);
-
     predictions.push({
       pattern: i + 1,
       name: patterns[i].name,
@@ -1112,7 +1391,8 @@ function generatePredictions(targetDate, targetRound) {
       method: patterns[i].method,
       numbers: result.numbers,
       bonus: result.bonus,
-      description: desc
+      description: desc,
+      coverage: allNumbers.size,
     });
   }
 
@@ -1120,7 +1400,8 @@ function generatePredictions(targetDate, targetRound) {
     round: targetRound,
     date: dateStr,
     predictions,
-    timestamp: now().toISOString()
+    timestamp: now().toISOString(),
+    uniqueNumbers: allNumbers.size,
   };
 
   // Cache to localStorage
@@ -1139,33 +1420,43 @@ function generatePredictions(targetDate, targetRound) {
 function generateDescription(patternIdx, result, data) {
   const nums = result.numbers;
   const sum = nums.reduce((a,b)=>a+b,0);
+  const gravity = (sum/6).toFixed(1);
   const odd = nums.filter(n=>n%2===1).length;
   const even = 6 - odd;
   const freq = calcFrequency(data, 50);
   const hotNums = nums.filter(n => freq[n] >= 8);
   const coldNums = nums.filter(n => freq[n] <= 3);
-  const hasConsec = nums.some((n,i) => i < 5 && nums[i+1] === n+1);
+  const sorted = [...nums].sort((a,b)=>a-b);
+  const gaps = sorted.slice(1).map((n,i)=>n-sorted[i]);
+  const hasConsec = gaps.some(g=>g===1);
+  const zones = [0,0,0,0,0];
+  for (const n of nums) {
+    if (n<=9) zones[0]++; else if (n<=18) zones[1]++; else if (n<=27) zones[2]++;
+    else if (n<=36) zones[3]++; else zones[4]++;
+  }
+  const zoneStr = zones.join('-');
+  const lastDigits = new Set(nums.map(n=>n%10));
 
   const descs = [
-    [ // Pattern 1
-      `直近50回で高頻度出現の数字を中心に選出。合計値${sum}は統計的に最頻出帯。`,
-      `偶奇比 ${even}:${odd}${hasConsec ? '、連番ペアを含む' : ''}。上昇トレンドの数字${hotNums.length > 0 ? '(' + hotNums.join(',') + ')' : ''}を重視。`
+    [ // Pattern 1: Hot + Dynamic Window
+      `動的ウィンドウで各数字の最適期間を個別算出。合計値${sum}（重心${gravity}）。8000回モンテカルロで最適化。`,
+      `偶奇比${even}:${odd}、ゾーン配分[${zoneStr}]${hasConsec?'、連番含む':''}。末尾${lastDigits.size}種分散。`
     ],
-    [ // Pattern 2
-      `出現間隔が平均を超過した「期限切れ」数字を優先選出。大数の法則に基づく回帰予測。`,
-      `合計値${sum}、${coldNums.length > 0 ? '低頻度数字(' + coldNums.join(',') + ')' : '期限超過数字'}を中心に構成。`
+    [ // Pattern 2: Contrarian
+      `理論出現率との乖離率を計算し、回帰圧力の高い数字を重点選択。出現間隔2倍超の回帰候補を優先。`,
+      `合計値${sum}（重心${gravity}）、${coldNums.length>0?'低頻度('+coldNums.join(',')+')':'回帰候補'}中心。ゾーン[${zoneStr}]。`
     ],
-    [ // Pattern 3
-      `前回・前々回の当選番号からマルコフ遷移確率を計算。ポアソン分布でλ=${(6/43).toFixed(3)}を基準に補正。`,
-      `遷移確率の高い数字${hasConsec ? '＋連番パターン' : ''}を選出。合計値${sum}で偶奇比${even}:${odd}。`
+    [ // Pattern 3: Markov + Gap
+      `マルコフ遷移確率＋ギャップ分析。前回からの引き継ぎ期待値に基づく構成。`,
+      `合計値${sum}、偶奇比${even}:${odd}、間隔分布[${gaps.join(',')}]${hasConsec?'連番含む':''}。`
     ],
-    [ // Pattern 4
-      `フィボナッチ数列・素数・黄金比(φ=1.618)に基づく数論的選出。ガウス分布で中心傾向を補正。`,
-      `数字帯バランスを最適化。合計値${sum}は過去データの正規分布内。偶奇比${even}:${odd}。`
+    [ // Pattern 4: Number Theory + Zone Balance
+      `フィボナッチ・素数・黄金比＋5ゾーン均等配分。ガウス分布で中心補正。動的頻度反映。`,
+      `合計値${sum}（重心${gravity}）、ゾーン[${zoneStr}]、偶奇比${even}:${odd}。末尾${lastDigits.size}種。`
     ],
-    [ // Pattern 5
-      `全4手法のスコアをベイズ推定で統合。事後確率最大の組み合わせを選出。`,
-      `ゲーム理論的に期待値を最大化。合計値${sum}、偶奇比${even}:${odd}${hasConsec ? '、連番あり' : ''}。`
+    [ // Pattern 5: Ensemble AI
+      `全4手法のベイズ統合×10000回モンテカルロ最適化。中央帯に合計値を集中。`,
+      `合計値${sum}（重心${gravity}）、偶奇比${even}:${odd}、ゾーン[${zoneStr}]${hasConsec?'、連番あり':''}。`
     ],
   ];
   return descs[patternIdx];
@@ -1200,7 +1491,7 @@ function verifyPrediction(prediction, actualResult) {
   return results;
 }
 
-// === LEARNING (Weight Adjustment) ===
+// === LEARNING (Weight Adjustment - Enhanced) ===
 function updateWeights() {
   const history = LS.get('predHistory') || [];
   const data = getAllData();
@@ -1208,6 +1499,7 @@ function updateWeights() {
   for (const d of data) dataMap[d.id] = d;
 
   const patternScores = [0,0,0,0,0];
+  const patternCounts = [0,0,0,0,0];
   let count = 0;
 
   for (const pred of history) {
@@ -1218,14 +1510,30 @@ function updateWeights() {
     count++;
     for (let i = 0; i < 5; i++) {
       patternScores[i] += verification[i].hitCount;
+      patternCounts[i]++;
     }
   }
 
-  if (count > 0) {
-    const avg = patternScores.map(s => s / count);
-    const maxScore = Math.max(...avg.slice(0,4));
-    const weights = avg.slice(0,4).map(s => maxScore > 0 ? s / maxScore : 1);
-    LS.set('ensembleWeights', weights);
+  // Need at least 10 samples for meaningful weight adjustment
+  if (count >= 10) {
+    const avg = patternScores.map((s,i) => patternCounts[i] > 0 ? s / patternCounts[i] : 0);
+    const totalAvg = avg.reduce((a,b)=>a+b,0) / 4;
+
+    // Only use first 4 patterns for ensemble weights
+    const weights = avg.slice(0,4).map(s => {
+      if (totalAvg <= 0) return 1;
+      const ratio = s / totalAvg;
+      // Smooth adjustment: don't over-react
+      return 0.5 + ratio * 0.5;
+    });
+
+    // Normalize so they sum to 4
+    const wSum = weights.reduce((a,b)=>a+b,0);
+    const normalized = weights.map(w => w / wSum * 4);
+    LS.set('ensembleWeights', normalized);
+  } else if (count > 0) {
+    // With fewer samples, use equal weights
+    LS.set('ensembleWeights', [1,1,1,1]);
   }
 }
 
@@ -1281,6 +1589,9 @@ function renderMain() {
       `;
     }
 
+    html += `<div style="text-align:center;font-size:12px;color:var(--muted);margin:12px 0">
+      5パターン合計: ${pred.uniqueNumbers || '?'}個の異なる数字をカバー
+    </div>`;
     html += `<div class="disclaimer">※本予測は統計的分析に基づくもので、当選を保証するものではありません</div>`;
     container.innerHTML = html;
   } else {
@@ -1560,12 +1871,15 @@ function renderDistCharts() {
     });
   }
 
-  // Zonal distribution
-  const zonalData = recent50.map(d => ({
-    low: d.n.filter(n=>n<=15).length,
-    mid: d.n.filter(n=>n>=16&&n<=29).length,
-    high: d.n.filter(n=>n>=30).length
-  }));
+  // 5-zone distribution (enhanced)
+  const zonalData = recent50.map(d => {
+    const z = [0,0,0,0,0];
+    for (const n of d.n) {
+      if (n<=9) z[0]++; else if (n<=18) z[1]++; else if (n<=27) z[2]++;
+      else if (n<=36) z[3]++; else z[4]++;
+    }
+    return z;
+  });
   if (charts.zonal) charts.zonal.destroy();
   const zCtx = document.getElementById('zonalChart');
   if (zCtx) {
@@ -1574,22 +1888,25 @@ function renderDistCharts() {
       data: {
         labels: recent50.map(d => d.id),
         datasets: [
-          { label: '低(1-15)', data: zonalData.map(z=>z.low), backgroundColor: '#3B82F6' },
-          { label: '中(16-29)', data: zonalData.map(z=>z.mid), backgroundColor: '#10B981' },
-          { label: '高(30-43)', data: zonalData.map(z=>z.high), backgroundColor: '#F59E0B' }
+          { label: '1-9', data: zonalData.map(z=>z[0]), backgroundColor: '#F59E0B' },
+          { label: '10-18', data: zonalData.map(z=>z[1]), backgroundColor: '#EF4444' },
+          { label: '19-27', data: zonalData.map(z=>z[2]), backgroundColor: '#3B82F6' },
+          { label: '28-36', data: zonalData.map(z=>z[3]), backgroundColor: '#10B981' },
+          { label: '37-43', data: zonalData.map(z=>z[4]), backgroundColor: '#8B5CF6' }
         ]
       },
       options: {
         responsive: true,
         maintainAspectRatio: true,
-        plugins: { title: { display: true, text: '数字帯分布（直近50回）' } },
+        plugins: { title: { display: true, text: '5ゾーン分布（直近50回）' } },
         scales: { x: { stacked: true }, y: { stacked: true, max: 6 } }
       }
     });
   }
 
-  // Sum distribution histogram
+  // Sum distribution histogram (enhanced with mean/std lines)
   const allSums = data.map(d => d.n.reduce((a,b)=>a+b,0));
+  const sumStats = calcSumStats(data);
   const bins = {};
   for (const s of allSums) {
     const bin = Math.floor(s/10)*10;
@@ -1608,7 +1925,7 @@ function renderDistCharts() {
       options: {
         responsive: true,
         maintainAspectRatio: true,
-        plugins: { title: { display: true, text: '合計値分布ヒストグラム' } }
+        plugins: { title: { display: true, text: `合計値分布（平均:${sumStats.mean.toFixed(0)} σ:${sumStats.std.toFixed(1)}）` } }
       }
     });
   }
@@ -1637,6 +1954,72 @@ function renderDistCharts() {
         responsive: true,
         maintainAspectRatio: true,
         plugins: { title: { display: true, text: '連番ペア出現頻度 Top20' } }
+      }
+    });
+  }
+
+  // NEW: Gap distribution chart
+  const gapStats = calcGapStats(data);
+  const gapBins = {};
+  for (const g of gapStats.allGaps) {
+    gapBins[g] = (gapBins[g]||0) + 1;
+  }
+  const gapLabels = Object.keys(gapBins).map(Number).sort((a,b)=>a-b);
+  if (charts.gap) charts.gap.destroy();
+  const gCtx = document.getElementById('gapChart');
+  if (gCtx) {
+    charts.gap = new Chart(gCtx, {
+      type: 'bar',
+      data: {
+        labels: gapLabels.map(String),
+        datasets: [{ label: '出現回数', data: gapLabels.map(g=>gapBins[g]), backgroundColor: '#10B981', borderRadius: 4 }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { title: { display: true, text: `数字間隔分布（平均:${gapStats.gapMean.toFixed(1)} σ:${gapStats.gapStd.toFixed(1)}）` } }
+      }
+    });
+  }
+
+  // NEW: Consecutive rate trend (rolling 50)
+  const consecRates = [];
+  const consecLabels = [];
+  const windowSize = 50;
+  for (let i = windowSize; i <= data.length; i++) {
+    const slice = data.slice(i - windowSize, i);
+    let consecCount = 0;
+    for (const d of slice) {
+      const nums = [...d.n].sort((a,b)=>a-b);
+      if (nums.some((n,j)=>j<5 && nums[j+1]===n+1)) consecCount++;
+    }
+    consecRates.push(Math.round(consecCount/windowSize*100));
+    consecLabels.push(data[i-1].id);
+  }
+  if (charts.consecTrend) charts.consecTrend.destroy();
+  const ctCtx = document.getElementById('consecTrendChart');
+  if (ctCtx) {
+    // Show only last 100 data points for readability
+    const maxPts = 100;
+    const sl = consecRates.length > maxPts ? consecRates.length - maxPts : 0;
+    charts.consecTrend = new Chart(ctCtx, {
+      type: 'line',
+      data: {
+        labels: consecLabels.slice(sl),
+        datasets: [{
+          label: '連番出現率(%)',
+          data: consecRates.slice(sl),
+          borderColor: '#F59E0B',
+          backgroundColor: 'rgba(245,158,11,0.1)',
+          fill: true,
+          tension: 0.3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { title: { display: true, text: '連番出現率の推移（50回移動平均）' } },
+        scales: { y: { min: 0, max: 100 } }
       }
     });
   }
@@ -1832,7 +2215,7 @@ function renderHitRate() {
 
   // Pattern comparison
   let compareHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">';
-  const patternNames = ['🔥 頻度分析', '❄️ 出現間隔', '🔗 マルコフ', '📐 数論', '🎯 アンサンブル'];
+  const patternNames = ['🔥 ホット頻度', '❄️ 逆張り回帰', '🔗 マルコフ連鎖', '📐 数論バランス', '🎯 アンサンブルAI'];
   for (let i = 0; i < 5; i++) {
     const avg = patternHits[i].length > 0 ? (patternHits[i].reduce((a,b)=>a+b,0)/patternHits[i].length).toFixed(2) : '-';
     compareHtml += `<div class="stat-card">
@@ -1981,6 +2364,92 @@ function savePrize() {
   document.getElementById('prizeAmount').value = '';
   renderSettings();
 }
+
+// === BACKTEST FUNCTION ===
+window.__backtest = function(n) {
+  n = n || 10;
+  const data = getAllData();
+  if (data.length < n + 50) {
+    console.log('Not enough data for backtest. Need at least ' + (n+50) + ' draws.');
+    return;
+  }
+
+  console.log(`=== BACKTEST: Last ${n} draws ===`);
+  console.log('');
+
+  const results = [];
+  for (let i = 0; i < n; i++) {
+    // Use data up to (but not including) the target draw
+    const targetIdx = data.length - 1 - i;
+    const target = data[targetIdx];
+    const trainingData = data.slice(0, targetIdx);
+
+    // Generate predictions using training data
+    const targetDate = new Date(target.d + 'T00:00:00');
+    const dateStr = target.d;
+
+    const patternFns = [
+      (d,r) => predictPattern1(d,r),
+      (d,r) => predictPattern2(d,r),
+      (d,r) => predictPattern3(d,r),
+      (d,r) => predictPattern4(d,r),
+      (d,r) => predictPattern5(d,r,[1,1,1,1]),
+    ];
+    const patternNames = ['ホット頻度', '逆張り回帰', 'マルコフ連鎖', '数論バランス', 'アンサンブルAI'];
+
+    const drawResult = { round: target.id, date: target.d, actual: target.n, bonus: target.b, patterns: [] };
+
+    for (let p = 0; p < 5; p++) {
+      const seed = dateStr + '_backtest_pattern' + p;
+      const rng = seededRandom(seed);
+      for (let j = 0; j < 10; j++) rng();
+      const result = patternFns[p](trainingData, rng);
+      const hits = result.numbers.filter(num => target.n.includes(num));
+      drawResult.patterns.push({ name: patternNames[p], numbers: result.numbers, hits: hits.length, matched: hits });
+    }
+
+    results.push(drawResult);
+
+    console.log(`第${target.id}回 (${target.d}) 当選: [${target.n.join(',')}] B:${target.b}`);
+    for (const p of drawResult.patterns) {
+      const hitMark = p.hits >= 3 ? ' ★' : '';
+      console.log(`  ${p.name}: [${p.numbers.join(',')}] → ${p.hits}個一致 ${p.matched.length > 0 ? '(' + p.matched.join(',') + ')' : ''}${hitMark}`);
+    }
+    console.log('');
+  }
+
+  // Summary
+  console.log('=== SUMMARY ===');
+  const patternTotals = [0,0,0,0,0];
+  const patternMax = [0,0,0,0,0];
+  const patternNames = ['ホット頻度', '逆張り回帰', 'マルコフ連鎖', '数論バランス', 'アンサンブルAI'];
+  for (const r of results) {
+    for (let p = 0; p < 5; p++) {
+      patternTotals[p] += r.patterns[p].hits;
+      patternMax[p] = Math.max(patternMax[p], r.patterns[p].hits);
+    }
+  }
+  for (let p = 0; p < 5; p++) {
+    console.log(`${patternNames[p]}: 平均 ${(patternTotals[p]/n).toFixed(2)}個一致, 最高 ${patternMax[p]}個`);
+  }
+
+  const overallAvg = patternTotals.reduce((a,b)=>a+b,0) / (n*5);
+  console.log(`全体平均: ${overallAvg.toFixed(2)}個一致`);
+
+  // Distribution of hit counts
+  const hitDist = {};
+  for (const r of results) {
+    for (const p of r.patterns) {
+      hitDist[p.hits] = (hitDist[p.hits]||0) + 1;
+    }
+  }
+  console.log('一致数分布:');
+  for (let h = 0; h <= 6; h++) {
+    if (hitDist[h]) console.log(`  ${h}個: ${hitDist[h]}回 (${(hitDist[h]/(n*5)*100).toFixed(1)}%)`);
+  }
+
+  return results;
+};
 
 // === INITIALIZATION ===
 function init() {
