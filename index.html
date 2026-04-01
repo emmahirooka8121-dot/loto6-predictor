@@ -2287,8 +2287,8 @@ function selectCoreNumbers(data, type) {
         if (data[k].n.includes(n)) consecutive++; else break;
       }
       if (consecutive === 2) score += 4;
-      else if (consecutive === 3) score += 2;
-      else if (consecutive >= 4) score += 0;
+      else if (consecutive === 3) score -= 3;
+      else if (consecutive >= 4) score -= 5;
     }
     const isSlide = lastDraw.n.some(ln => Math.abs(ln - n) === 1) && !inLast;
     const isSlide2 = prev2Draw && prev2Draw.n.some(ln => Math.abs(ln - n) === 1) && !inLast && !(prev2Draw.n.includes(n));
