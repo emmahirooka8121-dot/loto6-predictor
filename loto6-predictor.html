@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.0.0
+  Loto6 AI Predictor v8.0.1
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -594,7 +594,7 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.0.0</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.0.1</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
       搭載アルゴリズム (v8.0) — 統計的真実に基づくパラメータ全面見直し:<br>
       • 全2086回の統計検証で裏付けのない加減点を全て排除<br>
@@ -2357,66 +2357,6 @@ function generatePredictions(targetDate, targetRound) {
     rawPredictions.push({ idx: i, result: patterns[i].fn(data, rng), rng });
   }
 
-  // [v8-S3] Enforce diversity across ALL 5 patterns (cores exempted for P4-P5)
-  const numberCount = {};
-  for (let p = 0; p < 5; p++) {
-    for (const n of rawPredictions[p].result.numbers) {
-      // P4-P5の核は重複カウントから除外
-      if (p >= 3 && rawPredictions[p].result.cores && rawPredictions[p].result.cores.includes(n)) continue;
-      numberCount[n] = (numberCount[n] || 0) + 1;
-    }
-  }
-
-  const overused = new Set();
-  for (const [n, c] of Object.entries(numberCount)) {
-    if (c > 1) overused.add(parseInt(n));
-  }
-
-  if (overused.size > 0) {
-    const numPatternMap = {};
-    for (let pi = 0; pi < 5; pi++) {
-      for (const n of rawPredictions[pi].result.numbers) {
-        if (pi >= 3 && rawPredictions[pi].result.cores && rawPredictions[pi].result.cores.includes(n)) continue;
-        if (!numPatternMap[n]) numPatternMap[n] = [];
-        numPatternMap[n].push(rawPredictions[pi].idx);
-      }
-    }
-    const patternsToRegen = new Set();
-    for (const n of overused) {
-      const pats = numPatternMap[n];
-      for (let k = 1; k < pats.length; k++) {
-        patternsToRegen.add(pats[k]);
-      }
-    }
-
-    for (const pIdx of patternsToRegen) {
-      for (let attempt = 0; attempt < 50; attempt++) {
-        const seed = dateStr + '_pattern' + pIdx + '_v8_regen' + attempt;
-        const rng = seededRandom(seed);
-        for (let j = 0; j < 10; j++) rng();
-        const result = patterns[pIdx].fn(data, rng);
-
-        let valid = true;
-        for (const n of result.numbers) {
-          // P4-P5の核は重複OK
-          if (result.cores && result.cores.includes(n)) continue;
-          let count = 0;
-          for (let k = 0; k < 5; k++) {
-            if (k === pIdx) continue;
-            if (patternsToRegen.has(k) && k > pIdx) continue;
-            if (rawPredictions[k].result.numbers.includes(n)) count++;
-          }
-          if (count >= 1) { valid = false; break; }
-        }
-        if (valid) {
-          rawPredictions[pIdx].result = result;
-          rawPredictions[pIdx].rng = rng;
-          break;
-        }
-      }
-    }
-  }
-
   // [B2] Bonus diversity: ensure no duplicate bonuses
   const usedBonuses = new Set();
   for (let i = 0; i < 5; i++) {
@@ -2432,31 +2372,6 @@ function generatePredictions(targetDate, targetRound) {
       rawPredictions[i].result.bonus = bonus;
     }
     usedBonuses.add(bonus);
-  }
-
-  // [S2] Check coverage: at least 28 unique numbers, retry if needed
-  let allNumbers = new Set();
-  for (const p of rawPredictions) for (const n of p.result.numbers) allNumbers.add(n);
-
-  if (allNumbers.size < 30) {
-    // Find the pattern with most overlap and regenerate
-    for (let retry = 0; retry < 100 && allNumbers.size < 30; retry++) {
-      // Pick pattern that contributes fewest unique numbers
-      let worstIdx = 0, worstUnique = 7;
-      for (let i = 0; i < 5; i++) {
-        const otherNums = new Set();
-        for (let k = 0; k < 5; k++) { if (k !== i) for (const n of rawPredictions[k].result.numbers) otherNums.add(n); }
-        const uniqueContrib = rawPredictions[i].result.numbers.filter(n => !otherNums.has(n)).length;
-        if (uniqueContrib < worstUnique) { worstUnique = uniqueContrib; worstIdx = i; }
-      }
-      const seed = dateStr + '_pattern' + worstIdx + '_v5_cover' + retry;
-      const rng = seededRandom(seed);
-      for (let j = 0; j < 10; j++) rng();
-      const result = patterns[worstIdx].fn(data, rng);
-      rawPredictions[worstIdx].result = result;
-      allNumbers = new Set();
-      for (const p of rawPredictions) for (const n of p.result.numbers) allNumbers.add(n);
-    }
   }
 
   // [v5-A3] Zone coverage check - ensure all 5 zones are covered
@@ -2487,7 +2402,7 @@ function generatePredictions(targetDate, targetRound) {
         const maxConc = Math.max(...pZones);
         if (maxConc > worstConcentration) { worstConcentration = maxConc; worstIdx = i; }
       }
-      const seed2 = dateStr + '_pattern' + worstIdx + '_v5_zone' + retry;
+      const seed2 = dateStr + '_pattern' + worstIdx + '_v8_zone' + retry;
       const rng2 = seededRandom(seed2);
       for (let j = 0; j < 10; j++) rng2();
       rawPredictions[worstIdx].result = patterns[worstIdx].fn(data, rng2);
@@ -2502,6 +2417,52 @@ function generatePredictions(targetDate, targetRound) {
         }
       }
       emptyZones = zoneCoverage.map((c,i) => c === 0 ? i : -1).filter(z => z >= 0);
+    }
+  }
+
+  // [v8.0.1] Diversity enforcement via number swapping (after zone check)
+  const divFreq = calcFrequency(data, 100);
+  const divScoreRank = [];
+  for (let n = 1; n <= 43; n++) divScoreRank.push({ n, score: divFreq[n] || 0 });
+  divScoreRank.sort((a,b) => b.score - a.score);
+
+  let allNumbers = new Set();
+  for (const p of rawPredictions) for (const n of p.result.numbers) allNumbers.add(n);
+
+  for (let pass = 0; pass < 3 && allNumbers.size < 30; pass++) {
+    for (let pIdx = 1; pIdx < 5 && allNumbers.size < 30; pIdx++) {
+      const nums = [...rawPredictions[pIdx].result.numbers];
+      const otherNums = new Set();
+      for (let k = 0; k < 5; k++) {
+        if (k === pIdx) continue;
+        for (const n of rawPredictions[k].result.numbers) otherNums.add(n);
+      }
+      const duplicates = nums.filter(n => otherNums.has(n));
+      if (duplicates.length === 0) continue;
+      const currentAll = new Set();
+      for (const p of rawPredictions) for (const n of p.result.numbers) currentAll.add(n);
+      const unused = divScoreRank.filter(s => !currentAll.has(s.n));
+      let swapCount = 0, unusedIdx = 0;
+      for (let d = 0; d < duplicates.length && swapCount < 3 && unusedIdx < unused.length; d++) {
+        const oldNum = duplicates[d];
+        const idx = nums.indexOf(oldNum);
+        let swapped = false;
+        while (unusedIdx < unused.length) {
+          nums[idx] = unused[unusedIdx].n;
+          unusedIdx++;
+          nums.sort((a,b) => a-b);
+          if (!isImpossibleCombo(nums)) { swapped = true; swapCount++; break; }
+          nums[idx] = oldNum;
+          nums.sort((a,b) => a-b);
+        }
+        if (!swapped) { nums[idx] = oldNum; nums.sort((a,b) => a-b); }
+      }
+      if (swapCount > 0) {
+        nums.sort((a,b) => a-b);
+        rawPredictions[pIdx].result.numbers = nums;
+        allNumbers = new Set();
+        for (const p of rawPredictions) for (const n of p.result.numbers) allNumbers.add(n);
+      }
     }
   }
 
@@ -2521,6 +2482,12 @@ function generatePredictions(targetDate, targetRound) {
       cores: result.cores || [],
       coverage: allNumbers.size,
     });
+  }
+
+  // [v8.0.1] Debug: カバー範囲の確認
+  console.log('[v8] Unique numbers covered:', allNumbers.size, '/ Target: 30+');
+  if (allNumbers.size < 30) {
+    console.warn('[v8] WARNING: Coverage below target!', allNumbers.size);
   }
 
   const predData = {
