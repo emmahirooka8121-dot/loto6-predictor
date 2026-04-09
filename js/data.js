@@ -2,6 +2,14 @@
 // Each entry: id (draw number), date, nums (6 main numbers sorted ascending), bonus number
 // Numbers range from 1-43, draws occur on Mondays and Thursdays
 const LOTO6_BUILTIN_DATA = [
+  { id: 2092, date: "2026-04-09", nums: [8,13,27,36,37,43], bonus: 3 },
+  { id: 2091, date: "2026-04-06", nums: [6,16,21,25,28,43], bonus: 9 },
+  { id: 2090, date: "2026-04-02", nums: [2,3,6,9,24,36], bonus: 5 },
+  { id: 2089, date: "2026-03-30", nums: [9,16,18,32,37,43], bonus: 13 },
+  { id: 2088, date: "2026-03-26", nums: [8,16,18,27,37,39], bonus: 29 },
+  { id: 2087, date: "2026-03-23", nums: [7,10,15,18,26,39], bonus: 13 },
+  { id: 2086, date: "2026-03-19", nums: [4,11,19,28,39,40], bonus: 6 },
+  { id: 2085, date: "2026-03-16", nums: [6,8,13,26,35,43], bonus: 14 },
   { id: 2084, date: "2026-03-12", nums: [2,8,15,16,18,41], bonus: 11 },
   { id: 2083, date: "2026-03-09", nums: [3,6,7,28,35,38], bonus: 2 },
   { id: 2082, date: "2026-03-05", nums: [2,6,14,15,33,39], bonus: 42 },
