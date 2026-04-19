@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.3.0
+  Loto6 AI Predictor v8.4.0
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -598,12 +598,14 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.3.0</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.4.0</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.3) — 実験モード追加:<br>
-      • メイン5パターン予測は変更なし<br>
-      • 実験タブで5思考×10パターン=50パターン生成<br>
-      • 投資額10,000円/回の期待値検証用
+      搭載アルゴリズム (v8.4) — 実験モード完全統合:<br>
+      • 50パターン必ず生成（重複排除の修正）<br>
+      • 予測タブの5パターンと実験タブの各思考1番目が一致（⭐メイン表示）<br>
+      • 定刻自動生成（予測タブと同タイミング）<br>
+      • 履歴タブと同じ検証UI（当選番号との自動照合）<br>
+      • 思考別の的中率統計・収支表示
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -618,7 +620,7 @@ body {
     <div class="card-title">🧪 実験モード - 50パターン予測</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
       5つの思考 × 各10パターン = 50パターンの予測を生成します。<br>
-      メインの5パターン予測は影響を受けません。
+      各思考のパターン#1は予測タブのメイン予測と同一です。
     </p>
     <button class="btn btn-primary" onclick="generate50Patterns()" style="width:100%">🧪 50パターン生成</button>
     <div id="exp-status" style="margin-top:8px;font-size:13px;color:var(--muted)"></div>
@@ -648,10 +650,10 @@ body {
       <div class="card-title">💎 安定型B スライド重視 (10パターン)</div>
       <div class="pattern-list"></div>
     </div>
-    <div class="card">
-      <div class="card-title">📜 実験履歴</div>
-      <div id="exp-history" style="font-size:13px"></div>
-    </div>
+  </div>
+  <div class="card" id="exp-history-section">
+    <div class="card-title">📜 過去の実験結果と検証</div>
+    <div id="exp-history" style="font-size:13px"></div>
   </div>
 </div>
 
@@ -3918,9 +3920,8 @@ function init() {
   renderMain();
   renderPastPredictions();
 }
-
 // ============================================================
-// [v8.3] Experimental Mode: 5 strategies × 10 patterns = 50
+// [v8.4] Experimental Mode: 5 strategies × 10 patterns = 50
 // ============================================================
 async function generate50Patterns() {
   const data = getAllData();
@@ -3939,6 +3940,8 @@ async function generate50Patterns() {
   document.getElementById('exp-results').style.display = 'none';
   await new Promise(r => setTimeout(r, 50));
 
+  const mainPred = generatePredictions(targetDate, schedule.targetRound);
+
   const strategyFns = [
     { key: 'hot', fn: (d,r) => predictPattern1(d,r,targetDay) },
     { key: 'markov', fn: (d,r) => predictPattern3(d,r,targetDay) },
@@ -3949,13 +3952,21 @@ async function generate50Patterns() {
 
   const results = {};
 
-  for (const strat of strategyFns) {
+  for (let si = 0; si < strategyFns.length; si++) {
+    const strat = strategyFns[si];
     results[strat.key] = [];
     const seen = new Set();
 
-    for (let i = 0; i < 10; i++) {
+    if (mainPred && mainPred.predictions && mainPred.predictions[si]) {
+      const mp = mainPred.predictions[si];
+      results[strat.key].push({ numbers: mp.numbers, bonus: mp.bonus, isMain: true });
+      seen.add([...mp.numbers].sort((a,b)=>a-b).join(','));
+    }
+
+    const startIdx = results[strat.key].length;
+    for (let i = startIdx; i < 10; i++) {
       let result = null;
-      for (let attempt = 0; attempt < 30; attempt++) {
+      for (let attempt = 0; attempt < 100; attempt++) {
         const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_a' + attempt;
         const rng = seededRandom(seed);
         for (let j = 0; j < 10; j++) rng();
@@ -3967,18 +3978,28 @@ async function generate50Patterns() {
           break;
         }
       }
-      if (result) results[strat.key].push(result);
+      if (!result) {
+        const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_fallback';
+        const rng = seededRandom(seed);
+        for (let j = 0; j < 10; j++) rng();
+        result = strat.fn(data, rng);
+      }
+      results[strat.key].push(result);
     }
 
     document.getElementById('exp-status').textContent = '生成中... (' + strat.key + ' 完了)';
     await new Promise(r => setTimeout(r, 10));
   }
 
+  let total = 0;
+  for (const g of Object.values(results)) total += g.length;
+  console.log('[v8.4] Experimental patterns generated:', total);
+
   displayExperimentalResults(results, dateStr);
 
   LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results, createdAt: new Date().toISOString() });
 
-  document.getElementById('exp-status').textContent = '第' + schedule.targetRound + '回（' + dateStr + '）の50パターン生成完了';
+  document.getElementById('exp-status').textContent = '第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
   document.getElementById('exp-results').style.display = 'block';
 }
 
@@ -3998,6 +4019,7 @@ function displayExperimentalResults(results, dateStr) {
   }
 
   const top10 = Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 10).map(([n,c]) => n + '(' + c + '回)').join(', ');
+  const investment = totalPatterns * 200;
 
   const summary = document.getElementById('exp-summary');
   summary.innerHTML =
@@ -4005,7 +4027,7 @@ function displayExperimentalResults(results, dateStr) {
     '<p>🎯 カバー範囲: <strong>' + allNums.size + '個</strong> / 43個' +
     (allNums.size >= 43 ? ' ✅ 全数字カバー' : '') + '</p>' +
     '<p>📊 パターン総数: <strong>' + totalPatterns + 'パターン</strong></p>' +
-    '<p>💰 投資額: <strong>' + (totalPatterns * 200).toLocaleString() + '円</strong>（200円×' + totalPatterns + '口）</p>' +
+    '<p>💰 投資額: <strong>' + investment.toLocaleString() + '円</strong>（200円×' + totalPatterns + '口）</p>' +
     '<p>🔁 最多登場Top10: ' + top10 + '</p>';
 
   const groupMap = [
@@ -4025,8 +4047,10 @@ function displayExperimentalResults(results, dateStr) {
       const sorted = [...r.numbers].sort(function(a,b){return a-b;});
       const p = document.createElement('div');
       p.style.cssText = 'padding:6px 8px;margin:2px 0;border-bottom:1px solid var(--border);font-size:14px;display:flex;align-items:center;gap:8px;';
+      const mainBadge = r.isMain ? '<span style="color:#4CAF50;font-weight:bold;font-size:12px;">⭐メイン</span>' : '';
       p.innerHTML =
-        '<span style="color:var(--muted);min-width:24px;">#' + (i+1) + '</span>' +
+        '<span style="color:var(--muted);min-width:28px;">#' + (i+1) + '</span>' +
+        mainBadge +
         '<span style="font-family:monospace;letter-spacing:1px;">' + sorted.map(function(n){return String(n).padStart(2,'0');}).join(' ') + '</span>' +
         '<span style="color:var(--accent);font-size:12px;">B:' + (r.bonus || '?') + '</span>';
       div.appendChild(p);
@@ -4039,11 +4063,21 @@ function renderExperimental() {
   const targetDate = schedule.targetDraw;
   const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}-${String(targetDate.getDate()).padStart(2,'0')}`;
 
+  if (!schedule.showPrediction) {
+    document.getElementById('exp-status').innerHTML =
+      '次回予測（第' + schedule.targetRound + '回）は抽選前日の12時から表示されます';
+    document.getElementById('exp-results').style.display = 'none';
+    renderExpHistory();
+    return;
+  }
+
   const saved = LS.get('exp_' + dateStr);
   if (saved && saved.results) {
     displayExperimentalResults(saved.results, dateStr);
     document.getElementById('exp-status').textContent = '第' + schedule.targetRound + '回（' + dateStr + '）の保存済み50パターン';
     document.getElementById('exp-results').style.display = 'block';
+  } else {
+    generate50Patterns();
   }
 
   renderExpHistory();
@@ -4062,42 +4096,95 @@ function renderExpHistory() {
 
   allKeys.sort().reverse();
   let html = '';
+  const groupNames = { hot:'🔥ホット頻度', markov:'🔗マルコフ連鎖', ensemble:'🎯アンサンブルAI', stableA:'💰安定型A', stableB:'💎安定型B' };
 
   for (const key of allKeys.slice(0, 10)) {
     const saved = LS.get(key);
     if (!saved || !saved.results) continue;
 
     const drawData = data.find(function(d){return d.d === saved.date;});
-    let matchInfo = '';
-    if (drawData) {
-      const winSet = new Set(drawData.n);
-      const hits = [0,0,0,0,0,0,0];
-      let total = 0;
-      for (const group of Object.values(saved.results)) {
-        for (const r of group) {
-          const h = r.numbers.filter(function(n){return winSet.has(n);}).length;
-          hits[h]++;
-          total++;
-        }
-      }
-      matchInfo =
-        '<div style="margin-top:4px;font-size:12px;">' +
-        '<span>当選: <strong>' + drawData.n.join('-') + '</strong> B:' + drawData.b + '</span><br>' +
-        '<span>6個: ' + hits[6] + ' | 5個: ' + hits[5] + ' | 4個: ' + hits[4] + ' | 3個: ' + hits[3] + ' | 2個以下: ' + (hits[0]+hits[1]+hits[2]) + '</span>' +
+    let totalPatterns = 0;
+    for (const g of Object.values(saved.results)) totalPatterns += g.length;
+
+    if (!drawData) {
+      html +=
+        '<div style="padding:10px 0;border-bottom:1px solid var(--border);">' +
+        '<strong>' + saved.date + '</strong>' +
+        (saved.round ? ' 第' + saved.round + '回' : '') +
+        '<div style="margin-top:4px;color:var(--muted);">' + totalPatterns + 'パターン生成済み — 当選番号が入力されると検証結果が表示されます</div>' +
         '</div>';
-    } else {
-      matchInfo = '<div style="margin-top:4px;font-size:12px;color:var(--muted)">未照合（当選番号未入力）</div>';
+      continue;
     }
 
+    const winSet = new Set(drawData.n);
+    const winB = drawData.b;
+    const stats = { hit6:0, hit5b:0, hit5:0, hit4:0, hit3:0, less:0, byGroup:{} };
+    const hitPatterns = [];
+
+    for (const [group, patterns] of Object.entries(saved.results)) {
+      stats.byGroup[group] = { total:patterns.length, hit3plus:0, totalHits:0 };
+      for (const r of patterns) {
+        const hits = r.numbers.filter(function(n){return winSet.has(n);}).length;
+        const bonusHit = r.bonus === winB;
+        stats.byGroup[group].totalHits += hits;
+        if (hits === 6) stats.hit6++;
+        else if (hits === 5 && bonusHit) stats.hit5b++;
+        else if (hits === 5) stats.hit5++;
+        else if (hits === 4) stats.hit4++;
+        else if (hits === 3) stats.hit3++;
+        else stats.less++;
+        if (hits >= 3) {
+          stats.byGroup[group].hit3plus++;
+          hitPatterns.push({ group:group, numbers:r.numbers, hits:hits, bonus:r.bonus, bonusHit:bonusHit });
+        }
+      }
+    }
+
+    const prize = stats.hit6*200000000 + stats.hit5b*10000000 + stats.hit5*500000 + stats.hit4*9800 + stats.hit3*1000;
+    const investment = totalPatterns * 200;
+    const profit = prize - investment;
+
+    const winBalls = drawData.n.map(function(n){
+      return '<span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;background:var(--accent);color:#fff;border-radius:50%;margin:1px;font-size:12px;">' + n + '</span>';
+    }).join('') + '<span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;background:#FF9800;color:#fff;border-radius:50%;margin:1px;font-size:12px;">B' + winB + '</span>';
+
+    let groupStats = '';
+    for (const [g, s] of Object.entries(stats.byGroup)) {
+      const avg = s.total > 0 ? (s.totalHits / s.total).toFixed(2) : '0';
+      groupStats += '<span style="margin-right:12px;">' + (groupNames[g]||g) + ': 平均' + avg + '個 (' + s.hit3plus + '/' + s.total + '口)</span>';
+    }
+
+    let hitDetails = '';
+    if (hitPatterns.length > 0) {
+      let hitInner = '';
+      for (const hp of hitPatterns) {
+        const sorted = [...hp.numbers].sort(function(a,b){return a-b;});
+        const balls = sorted.map(function(n){
+          var c = winSet.has(n) ? '#f44336' : '#666';
+          return '<span style="display:inline-block;width:24px;height:24px;line-height:24px;text-align:center;background:'+c+';color:#fff;border-radius:50%;margin:1px;font-size:11px;">'+n+'</span>';
+        }).join('');
+        hitInner += '<div style="margin:3px 0;">' + (groupNames[hp.group]||hp.group) + ': ' + balls + ' B:' + hp.bonus + (hp.bonusHit?'✨':'') + ' → <strong>' + hp.hits + '個</strong></div>';
+      }
+      hitDetails = '<details style="margin-top:6px;"><summary style="cursor:pointer;color:var(--accent);">🎯 3個以上一致: ' + hitPatterns.length + '口</summary><div style="padding:6px 0;">' + hitInner + '</div></details>';
+    }
+
+    const profitColor = profit >= 0 ? '#4CAF50' : '#f44336';
+
     html +=
-      '<div style="padding:8px 0;border-bottom:1px solid var(--border);">' +
-      '<strong>' + saved.date + '</strong>' +
-      (saved.round ? ' 第' + saved.round + '回' : '') +
-      matchInfo +
+      '<div style="padding:10px 0;border-bottom:1px solid var(--border);">' +
+      '<div><strong>' + saved.date + '</strong>' + (saved.round ? ' 第' + saved.round + '回' : '') + '</div>' +
+      '<div style="margin:4px 0;">' + winBalls + '</div>' +
+      '<div style="background:var(--card-bg);padding:6px 8px;border-radius:4px;margin:4px 0;border:1px solid var(--border);">' +
+        '<span>1等:' + stats.hit6 + ' 2等:' + stats.hit5b + ' 3等:' + stats.hit5 + ' 4等:' + stats.hit4 + ' 5等:' + stats.hit3 + '</span>' +
+        '<span style="margin-left:12px;color:' + profitColor + ';font-weight:bold;">収支: ' + (profit>=0?'+':'') + profit.toLocaleString() + '円</span>' +
+        ' <span style="color:var(--muted);">(投資' + investment.toLocaleString() + '円 / 当選' + prize.toLocaleString() + '円)</span>' +
+      '</div>' +
+      '<div style="margin-top:4px;font-size:12px;color:var(--muted);line-height:1.6;">' + groupStats + '</div>' +
+      hitDetails +
       '</div>';
   }
 
-  histDiv.innerHTML = html;
+  histDiv.innerHTML = html || '<p style="color:var(--muted)">まだ実験履歴はありません</p>';
 }
 document.addEventListener('DOMContentLoaded', init);
 
