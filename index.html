@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.2.0
+  Loto6 AI Predictor v8.3.0
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -381,6 +381,7 @@ body {
   <button onclick="switchTab(3)" data-tab="3">🔢 当選番号</button>
   <button onclick="switchTab(4)" data-tab="4">🎯 的中率</button>
   <button onclick="switchTab(5)" data-tab="5">⚙️ 設定</button>
+  <button onclick="switchTab(6)" data-tab="6">🧪 実験</button>
 </nav>
 
 <!-- Bottom Nav (Mobile) -->
@@ -402,6 +403,9 @@ body {
   </button>
   <button onclick="switchTab(5)" data-tab="5">
     <span class="nav-icon">⚙️</span>設定
+  </button>
+  <button onclick="switchTab(6)" data-tab="6">
+    <span class="nav-icon">🧪</span>実験
   </button>
 </nav>
 
@@ -594,17 +598,60 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.2.0</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.3.0</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.2) — 統計的に無意味な加点をさらに排除:<br>
-      • 複合条件ボーナス削除（出現率13.28%、理論値以下）<br>
-      • ボーナス→本数字の加点削除（出現率13.61%、理論値以下）<br>
-      • 前回ボーナス±1→本数字は維持（出現率14.47%、唯一理論値超）
+      搭載アルゴリズム (v8.3) — 実験モード追加:<br>
+      • メイン5パターン予測は変更なし<br>
+      • 実験タブで5思考×10パターン=50パターン生成<br>
+      • 投資額10,000円/回の期待値検証用
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
       宝くじの購入は自己責任でお願いいたします。
     </p>
+  </div>
+</div>
+
+<!-- Tab 6: Experimental Mode -->
+<div class="tab-content" id="tab6">
+  <div class="card">
+    <div class="card-title">🧪 実験モード - 50パターン予測</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+      5つの思考 × 各10パターン = 50パターンの予測を生成します。<br>
+      メインの5パターン予測は影響を受けません。
+    </p>
+    <button class="btn btn-primary" onclick="generate50Patterns()" style="width:100%">🧪 50パターン生成</button>
+    <div id="exp-status" style="margin-top:8px;font-size:13px;color:var(--muted)"></div>
+  </div>
+  <div id="exp-results" style="display:none;">
+    <div class="card">
+      <div class="card-title">📊 50パターンの統計</div>
+      <div id="exp-summary" style="font-size:13px"></div>
+    </div>
+    <div class="card" id="exp-group-hot">
+      <div class="card-title">🔥 ホット頻度型 (10パターン)</div>
+      <div class="pattern-list"></div>
+    </div>
+    <div class="card" id="exp-group-markov">
+      <div class="card-title">🔗 マルコフ連鎖型 (10パターン)</div>
+      <div class="pattern-list"></div>
+    </div>
+    <div class="card" id="exp-group-ensemble">
+      <div class="card-title">🎯 アンサンブルAI型 (10パターン)</div>
+      <div class="pattern-list"></div>
+    </div>
+    <div class="card" id="exp-group-stableA">
+      <div class="card-title">💰 安定型A 引き継ぎ重視 (10パターン)</div>
+      <div class="pattern-list"></div>
+    </div>
+    <div class="card" id="exp-group-stableB">
+      <div class="card-title">💎 安定型B スライド重視 (10パターン)</div>
+      <div class="pattern-list"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📜 実験履歴</div>
+      <div id="exp-history" style="font-size:13px"></div>
+    </div>
   </div>
 </div>
 
@@ -2636,6 +2683,7 @@ function switchTab(idx) {
   if (idx === 3) renderResults();
   if (idx === 4) renderHitRate();
   if (idx === 5) renderSettings();
+  if (idx === 6) renderExperimental();
 }
 
 function renderMain() {
@@ -3871,6 +3919,186 @@ function init() {
   renderPastPredictions();
 }
 
+// ============================================================
+// [v8.3] Experimental Mode: 5 strategies × 10 patterns = 50
+// ============================================================
+async function generate50Patterns() {
+  const data = getAllData();
+  if (data.length < 10) {
+    document.getElementById('exp-status').textContent = 'データが不足しています';
+    return;
+  }
+
+  const schedule = getDrawSchedule();
+  const targetDate = schedule.targetDraw;
+  const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}-${String(targetDate.getDate()).padStart(2,'0')}`;
+  const targetDay = targetDate.getDay();
+  const weights = LS.get('ensembleWeights') || [1,1,1,1];
+
+  document.getElementById('exp-status').textContent = '生成中...';
+  document.getElementById('exp-results').style.display = 'none';
+  await new Promise(r => setTimeout(r, 50));
+
+  const strategyFns = [
+    { key: 'hot', fn: (d,r) => predictPattern1(d,r,targetDay) },
+    { key: 'markov', fn: (d,r) => predictPattern3(d,r,targetDay) },
+    { key: 'ensemble', fn: (d,r) => predictPattern5(d,r,weights,targetDay) },
+    { key: 'stableA', fn: (d,r) => predictStableA(d,r,targetDay) },
+    { key: 'stableB', fn: (d,r) => predictStableB(d,r,targetDay) },
+  ];
+
+  const results = {};
+
+  for (const strat of strategyFns) {
+    results[strat.key] = [];
+    const seen = new Set();
+
+    for (let i = 0; i < 10; i++) {
+      let result = null;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_a' + attempt;
+        const rng = seededRandom(seed);
+        for (let j = 0; j < 10; j++) rng();
+        const r = strat.fn(data, rng);
+        const key = [...r.numbers].sort((a,b)=>a-b).join(',');
+        if (!seen.has(key)) {
+          seen.add(key);
+          result = r;
+          break;
+        }
+      }
+      if (result) results[strat.key].push(result);
+    }
+
+    document.getElementById('exp-status').textContent = '生成中... (' + strat.key + ' 完了)';
+    await new Promise(r => setTimeout(r, 10));
+  }
+
+  displayExperimentalResults(results, dateStr);
+
+  LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results, createdAt: new Date().toISOString() });
+
+  document.getElementById('exp-status').textContent = '第' + schedule.targetRound + '回（' + dateStr + '）の50パターン生成完了';
+  document.getElementById('exp-results').style.display = 'block';
+}
+
+function displayExperimentalResults(results, dateStr) {
+  const allNums = new Set();
+  const freq = {};
+  let totalPatterns = 0;
+
+  for (const group of Object.values(results)) {
+    for (const r of group) {
+      totalPatterns++;
+      for (const n of r.numbers) {
+        allNums.add(n);
+        freq[n] = (freq[n] || 0) + 1;
+      }
+    }
+  }
+
+  const top10 = Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 10).map(([n,c]) => n + '(' + c + '回)').join(', ');
+
+  const summary = document.getElementById('exp-summary');
+  summary.innerHTML =
+    '<p>📅 対象抽選日: <strong>' + dateStr + '</strong></p>' +
+    '<p>🎯 カバー範囲: <strong>' + allNums.size + '個</strong> / 43個' +
+    (allNums.size >= 43 ? ' ✅ 全数字カバー' : '') + '</p>' +
+    '<p>📊 パターン総数: <strong>' + totalPatterns + 'パターン</strong></p>' +
+    '<p>💰 投資額: <strong>' + (totalPatterns * 200).toLocaleString() + '円</strong>（200円×' + totalPatterns + '口）</p>' +
+    '<p>🔁 最多登場Top10: ' + top10 + '</p>';
+
+  const groupMap = [
+    { key: 'hot', divId: 'exp-group-hot' },
+    { key: 'markov', divId: 'exp-group-markov' },
+    { key: 'ensemble', divId: 'exp-group-ensemble' },
+    { key: 'stableA', divId: 'exp-group-stableA' },
+    { key: 'stableB', divId: 'exp-group-stableB' },
+  ];
+
+  for (const gm of groupMap) {
+    const div = document.querySelector('#' + gm.divId + ' .pattern-list');
+    if (!div || !results[gm.key]) continue;
+    div.innerHTML = '';
+
+    results[gm.key].forEach(function(r, i) {
+      const sorted = [...r.numbers].sort(function(a,b){return a-b;});
+      const p = document.createElement('div');
+      p.style.cssText = 'padding:6px 8px;margin:2px 0;border-bottom:1px solid var(--border);font-size:14px;display:flex;align-items:center;gap:8px;';
+      p.innerHTML =
+        '<span style="color:var(--muted);min-width:24px;">#' + (i+1) + '</span>' +
+        '<span style="font-family:monospace;letter-spacing:1px;">' + sorted.map(function(n){return String(n).padStart(2,'0');}).join(' ') + '</span>' +
+        '<span style="color:var(--accent);font-size:12px;">B:' + (r.bonus || '?') + '</span>';
+      div.appendChild(p);
+    });
+  }
+}
+
+function renderExperimental() {
+  const schedule = getDrawSchedule();
+  const targetDate = schedule.targetDraw;
+  const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}-${String(targetDate.getDate()).padStart(2,'0')}`;
+
+  const saved = LS.get('exp_' + dateStr);
+  if (saved && saved.results) {
+    displayExperimentalResults(saved.results, dateStr);
+    document.getElementById('exp-status').textContent = '第' + schedule.targetRound + '回（' + dateStr + '）の保存済み50パターン';
+    document.getElementById('exp-results').style.display = 'block';
+  }
+
+  renderExpHistory();
+}
+
+function renderExpHistory() {
+  const histDiv = document.getElementById('exp-history');
+  if (!histDiv) return;
+
+  const data = getAllData();
+  const allKeys = LS.keys().filter(function(k){return k.startsWith('exp_');});
+  if (allKeys.length === 0) {
+    histDiv.innerHTML = '<p style="color:var(--muted)">まだ実験履歴はありません</p>';
+    return;
+  }
+
+  allKeys.sort().reverse();
+  let html = '';
+
+  for (const key of allKeys.slice(0, 10)) {
+    const saved = LS.get(key);
+    if (!saved || !saved.results) continue;
+
+    const drawData = data.find(function(d){return d.d === saved.date;});
+    let matchInfo = '';
+    if (drawData) {
+      const winSet = new Set(drawData.n);
+      const hits = [0,0,0,0,0,0,0];
+      let total = 0;
+      for (const group of Object.values(saved.results)) {
+        for (const r of group) {
+          const h = r.numbers.filter(function(n){return winSet.has(n);}).length;
+          hits[h]++;
+          total++;
+        }
+      }
+      matchInfo =
+        '<div style="margin-top:4px;font-size:12px;">' +
+        '<span>当選: <strong>' + drawData.n.join('-') + '</strong> B:' + drawData.b + '</span><br>' +
+        '<span>6個: ' + hits[6] + ' | 5個: ' + hits[5] + ' | 4個: ' + hits[4] + ' | 3個: ' + hits[3] + ' | 2個以下: ' + (hits[0]+hits[1]+hits[2]) + '</span>' +
+        '</div>';
+    } else {
+      matchInfo = '<div style="margin-top:4px;font-size:12px;color:var(--muted)">未照合（当選番号未入力）</div>';
+    }
+
+    html +=
+      '<div style="padding:8px 0;border-bottom:1px solid var(--border);">' +
+      '<strong>' + saved.date + '</strong>' +
+      (saved.round ? ' 第' + saved.round + '回' : '') +
+      matchInfo +
+      '</div>';
+  }
+
+  histDiv.innerHTML = html;
+}
 document.addEventListener('DOMContentLoaded', init);
 
 </script>
