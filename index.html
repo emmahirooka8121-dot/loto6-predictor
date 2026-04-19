@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.5.0
+  Loto6 AI Predictor v8.5.1
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -597,15 +597,19 @@ body {
   </div>
 
   <div class="card">
+    <div class="card-title">🧪 実験モードの管理</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:8px">保存済みの50パターン予測データを全て削除します。次回実験タブを開いた時に最新のアルゴリズムで再生成されます。</p>
+    <button class="btn btn-danger" onclick="resetExpData()" style="width:100%">🔄 実験データを全てリセット</button>
+    <div id="reset-exp-status" style="margin-top:8px;font-size:13px"></div>
+  </div>
+  <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.0</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.1</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.5) — 実験モードの多様性強化＋自動表示:<br>
-      • 類似度ベースの重複排除（5個以上一致は類似扱い）<br>
-      • 安定型A/Bで多段階シード探索により多様性確保<br>
-      • カバー範囲43個を目指す構造に改善<br>
-      • 生成ボタン削除、タブを開くと自動表示<br>
-      • 多様性指標の表示（最頻数字/思考別カバー数）
+      搭載アルゴリズム (v8.5.1) — 実験データ管理機能追加:<br>
+      • リセットボタンで保存済みデータを手動削除可能<br>
+      • 古いバージョンのデータは自動的に再生成<br>
+      • 類似度ベース重複排除+多様性強化+自動表示（v8.5継承）
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -4021,7 +4025,7 @@ async function generate50Patterns() {
 
   displayExperimentalResults(results, dateStr);
 
-  LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results, createdAt: new Date().toISOString() });
+  LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results, createdAt: new Date().toISOString(), version: 'v8.5.1' });
 
   document.getElementById('exp-status').textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
   document.getElementById('exp-results').style.display = 'block';
@@ -4116,7 +4120,7 @@ function renderExperimental() {
   }
 
   const saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results) {
+  if (saved && saved.results && saved.version === 'v8.5.1') {
     let total = 0;
     for (const g of Object.values(saved.results)) total += g.length;
     if (total >= 50) {
@@ -4127,8 +4131,20 @@ function renderExperimental() {
       return;
     }
   }
+  if (saved && (!saved.version || saved.version !== 'v8.5.1')) {
+    LS.remove('exp_' + dateStr);
+  }
 
   generate50Patterns().then(function() { renderExpHistory(); });
+}
+
+function resetExpData() {
+  if (!confirm('保存済みの50パターン予測を全て削除します。よろしいですか？\n\n※メインの5パターン予測や当選履歴は影響を受けません。')) return;
+  var status = document.getElementById('reset-exp-status');
+  status.textContent = '削除中...';
+  var keys = LS.keys().filter(function(k){return k.startsWith('exp_');});
+  for (var i = 0; i < keys.length; i++) LS.remove(keys[i]);
+  status.innerHTML = '<span style="color:#4CAF50;">✅ ' + keys.length + '件の実験データを削除しました</span>';
 }
 
 function renderExpHistory() {
