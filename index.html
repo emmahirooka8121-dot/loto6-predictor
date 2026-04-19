@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.4.0
+  Loto6 AI Predictor v8.5.0
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -598,14 +598,14 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.4.0</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.0</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.4) — 実験モード完全統合:<br>
-      • 50パターン必ず生成（重複排除の修正）<br>
-      • 予測タブの5パターンと実験タブの各思考1番目が一致（⭐メイン表示）<br>
-      • 定刻自動生成（予測タブと同タイミング）<br>
-      • 履歴タブと同じ検証UI（当選番号との自動照合）<br>
-      • 思考別の的中率統計・収支表示
+      搭載アルゴリズム (v8.5) — 実験モードの多様性強化＋自動表示:<br>
+      • 類似度ベースの重複排除（5個以上一致は類似扱い）<br>
+      • 安定型A/Bで多段階シード探索により多様性確保<br>
+      • カバー範囲43個を目指す構造に改善<br>
+      • 生成ボタン削除、タブを開くと自動表示<br>
+      • 多様性指標の表示（最頻数字/思考別カバー数）
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -619,13 +619,11 @@ body {
   <div class="card">
     <div class="card-title">🧪 実験モード - 50パターン予測</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
-      5つの思考 × 各10パターン = 50パターンの予測を生成します。<br>
+      5つの思考 × 各10パターン = 50パターンの予測を自動生成します。<br>
       各思考のパターン#1は予測タブのメイン予測と同一です。
     </p>
-    <button class="btn btn-primary" onclick="generate50Patterns()" style="width:100%">🧪 50パターン生成</button>
     <div id="exp-status" style="margin-top:8px;font-size:13px;color:var(--muted)"></div>
   </div>
-  <div id="exp-results" style="display:none;">
     <div class="card">
       <div class="card-title">📊 50パターンの統計</div>
       <div id="exp-summary" style="font-size:13px"></div>
@@ -3921,8 +3919,18 @@ function init() {
   renderPastPredictions();
 }
 // ============================================================
-// [v8.4] Experimental Mode: 5 strategies × 10 patterns = 50
+// [v8.5] Experimental Mode: diversity-enhanced 50 patterns
 // ============================================================
+function isTooSimilar(newNumbers, existingPatterns, threshold) {
+  const ns = new Set(newNumbers);
+  for (const ep of existingPatterns) {
+    let overlap = 0;
+    for (const n of ns) { if (ep.numbers.includes(n)) overlap++; }
+    if (overlap >= threshold) return true;
+  }
+  return false;
+}
+
 async function generate50Patterns() {
   const data = getAllData();
   if (data.length < 10) {
@@ -3936,7 +3944,7 @@ async function generate50Patterns() {
   const targetDay = targetDate.getDay();
   const weights = LS.get('ensembleWeights') || [1,1,1,1];
 
-  document.getElementById('exp-status').textContent = '生成中...';
+  document.getElementById('exp-status').textContent = '🔄 予測を自動生成中...';
   document.getElementById('exp-results').style.display = 'none';
   await new Promise(r => setTimeout(r, 50));
 
@@ -3955,35 +3963,52 @@ async function generate50Patterns() {
   for (let si = 0; si < strategyFns.length; si++) {
     const strat = strategyFns[si];
     results[strat.key] = [];
-    const seen = new Set();
 
     if (mainPred && mainPred.predictions && mainPred.predictions[si]) {
       const mp = mainPred.predictions[si];
       results[strat.key].push({ numbers: mp.numbers, bonus: mp.bonus, isMain: true });
-      seen.add([...mp.numbers].sort((a,b)=>a-b).join(','));
     }
 
-    const startIdx = results[strat.key].length;
-    for (let i = startIdx; i < 10; i++) {
+    const isStable = (strat.key === 'stableA' || strat.key === 'stableB');
+
+    for (let i = results[strat.key].length; i < 10; i++) {
       let result = null;
-      for (let attempt = 0; attempt < 100; attempt++) {
+
+      // Phase 1: strict similarity check (5+ overlap = too similar)
+      const maxAttempts = isStable ? 300 : 200;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_a' + attempt;
         const rng = seededRandom(seed);
-        for (let j = 0; j < 10; j++) rng();
+        for (let j = 0; j < 10 + attempt; j++) rng();
         const r = strat.fn(data, rng);
-        const key = [...r.numbers].sort((a,b)=>a-b).join(',');
-        if (!seen.has(key)) {
-          seen.add(key);
+        if (!isTooSimilar(r.numbers, results[strat.key], 5)) {
           result = r;
           break;
         }
       }
+
+      // Phase 2: relax to 6-overlap (exact match only)
       if (!result) {
-        const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_fallback';
+        for (let attempt = 0; attempt < 100; attempt++) {
+          const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_relax' + attempt;
+          const rng = seededRandom(seed);
+          for (let j = 0; j < 10 + attempt * 3; j++) rng();
+          const r = strat.fn(data, rng);
+          if (!isTooSimilar(r.numbers, results[strat.key], 6)) {
+            result = r;
+            break;
+          }
+        }
+      }
+
+      // Phase 3: fallback
+      if (!result) {
+        const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_fb';
         const rng = seededRandom(seed);
-        for (let j = 0; j < 10; j++) rng();
+        for (let j = 0; j < 50; j++) rng();
         result = strat.fn(data, rng);
       }
+
       results[strat.key].push(result);
     }
 
@@ -3993,13 +4018,12 @@ async function generate50Patterns() {
 
   let total = 0;
   for (const g of Object.values(results)) total += g.length;
-  console.log('[v8.4] Experimental patterns generated:', total);
 
   displayExperimentalResults(results, dateStr);
 
   LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results, createdAt: new Date().toISOString() });
 
-  document.getElementById('exp-status').textContent = '第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
+  document.getElementById('exp-status').textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
   document.getElementById('exp-results').style.display = 'block';
 }
 
@@ -4020,15 +4044,35 @@ function displayExperimentalResults(results, dateStr) {
 
   const top10 = Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 10).map(([n,c]) => n + '(' + c + '回)').join(', ');
   const investment = totalPatterns * 200;
+  const maxFreq = Math.max(...Object.values(freq));
+  const avgFreq = (totalPatterns * 6 / Math.max(allNums.size, 1)).toFixed(1);
+  const diversityPct = (allNums.size / 43 * 100).toFixed(1);
+
+  const groupNames = { hot:'🔥ホット', markov:'🔗マルコフ', ensemble:'🎯アンサンブル', stableA:'💰安定A', stableB:'💎安定B' };
+  const groupDivStr = Object.entries(results).map(function(e) {
+    const gNums = new Set();
+    for (const r of e[1]) for (const n of r.numbers) gNums.add(n);
+    return (groupNames[e[0]]||e[0]) + ':' + gNums.size + '個';
+  }).join(' / ');
+
+  const divOk = maxFreq <= avgFreq * 2;
 
   const summary = document.getElementById('exp-summary');
   summary.innerHTML =
     '<p>📅 対象抽選日: <strong>' + dateStr + '</strong></p>' +
-    '<p>🎯 カバー範囲: <strong>' + allNums.size + '個</strong> / 43個' +
+    '<p>🎯 カバー範囲: <strong>' + allNums.size + '個</strong> / 43個 (' + diversityPct + '%)' +
     (allNums.size >= 43 ? ' ✅ 全数字カバー' : '') + '</p>' +
     '<p>📊 パターン総数: <strong>' + totalPatterns + 'パターン</strong></p>' +
     '<p>💰 投資額: <strong>' + investment.toLocaleString() + '円</strong>（200円×' + totalPatterns + '口）</p>' +
-    '<p>🔁 最多登場Top10: ' + top10 + '</p>';
+    '<p>🔁 最多登場Top10: ' + top10 + '</p>' +
+    '<div style="background:var(--card-bg);padding:8px;border-radius:4px;margin-top:8px;border:1px solid var(--border);">' +
+    '<p><strong>🎨 多様性チェック</strong></p>' +
+    '<p style="font-size:12px;">思考別カバー: ' + groupDivStr + '</p>' +
+    '<p style="font-size:12px;">最頻数字: ' + maxFreq + '回登場 (理想: ' + avgFreq + '回前後)</p>' +
+    (divOk
+      ? '<p style="color:#4CAF50;">✅ 多様性は適切</p>'
+      : '<p style="color:#f44336;">⚠️ 特定の数字への偏りが大きいです</p>') +
+    '</div>';
 
   const groupMap = [
     { key: 'hot', divId: 'exp-group-hot' },
@@ -4073,14 +4117,18 @@ function renderExperimental() {
 
   const saved = LS.get('exp_' + dateStr);
   if (saved && saved.results) {
-    displayExperimentalResults(saved.results, dateStr);
-    document.getElementById('exp-status').textContent = '第' + schedule.targetRound + '回（' + dateStr + '）の保存済み50パターン';
-    document.getElementById('exp-results').style.display = 'block';
-  } else {
-    generate50Patterns();
+    let total = 0;
+    for (const g of Object.values(saved.results)) total += g.length;
+    if (total >= 50) {
+      displayExperimentalResults(saved.results, dateStr);
+      document.getElementById('exp-status').textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の保存済み' + total + 'パターン';
+      document.getElementById('exp-results').style.display = 'block';
+      renderExpHistory();
+      return;
+    }
   }
 
-  renderExpHistory();
+  generate50Patterns().then(function() { renderExpHistory(); });
 }
 
 function renderExpHistory() {
@@ -4102,9 +4150,10 @@ function renderExpHistory() {
     const saved = LS.get(key);
     if (!saved || !saved.results) continue;
 
-    const drawData = data.find(function(d){return d.d === saved.date;});
     let totalPatterns = 0;
     for (const g of Object.values(saved.results)) totalPatterns += g.length;
+
+    const drawData = data.find(function(d){return d.d === saved.date;});
 
     if (!drawData) {
       html +=
