@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.5.2
+  Loto6 AI Predictor v8.5.3
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -604,12 +604,12 @@ body {
   </div>
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.2</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.3</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.5.2) — 実験モード表示バグ修正:<br>
-      • 全関数にtry-catch追加、エラーを画面に表示<br>
-      • 生成中の進捗を段階表示（1/5→2/5→...）<br>
-      • UIブロック防止のawait挿入、防御的null/undefinedチェック
+      搭載アルゴリズム (v8.5.3) — HTML要素ID不整合の修正:<br>
+      • 実験タブに欠落していたexp-resultsコンテナ要素を追加<br>
+      • 全てのgetElementById呼び出しにnullチェックを追加<br>
+      • バージョンベースのキャッシュ無効化をv8.5.3に更新
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -628,6 +628,7 @@ body {
     </p>
     <div id="exp-status" style="margin-top:8px;font-size:13px;color:var(--muted)"></div>
   </div>
+  <div id="exp-results" style="display:none;">
     <div class="card">
       <div class="card-title">📊 50パターンの統計</div>
       <div id="exp-summary" style="font-size:13px"></div>
@@ -3923,7 +3924,7 @@ function init() {
   renderPastPredictions();
 }
 // ============================================================
-// [v8.5.2] Experimental Mode: robust 50-pattern generation
+// [v8.5.3] Experimental Mode: robust 50-pattern generation
 // ============================================================
 function isTooSimilar(nums, existing, threshold) {
   for (var e = 0; e < existing.length; e++) {
@@ -3939,10 +3940,11 @@ function isTooSimilar(nums, existing, threshold) {
 
 async function generate50Patterns() {
   var statusEl = document.getElementById('exp-status');
+  var resultsEl = document.getElementById('exp-results');
   try {
     var data = getAllData();
     if (!data || data.length < 10) {
-      statusEl.textContent = 'データが不足しています';
+      if (statusEl) statusEl.textContent = 'データが不足しています';
       return;
     }
 
@@ -3952,8 +3954,8 @@ async function generate50Patterns() {
     var targetDay = targetDate.getDay();
     var weights = LS.get('ensembleWeights') || [1,1,1,1];
 
-    statusEl.textContent = '🔄 生成中... (1/5 ホット頻度)';
-    document.getElementById('exp-results').style.display = 'none';
+    if (statusEl) statusEl.textContent = '🔄 生成中... (1/5 ホット頻度)';
+    if (resultsEl) resultsEl.style.display = 'none';
     await new Promise(function(r){setTimeout(r,50);});
 
     var mainPred = null;
@@ -3974,7 +3976,7 @@ async function generate50Patterns() {
       var strat = strategyFns[si];
       results[strat.key] = [];
 
-      statusEl.textContent = '🔄 生成中... (' + (si+1) + '/5 ' + groupLabels[si] + ')';
+      if (statusEl) statusEl.textContent = '🔄 生成中... (' + (si+1) + '/5 ' + groupLabels[si] + ')';
       await new Promise(function(r){setTimeout(r,30);});
 
       if (mainPred && mainPred.predictions && mainPred.predictions[si]) {
@@ -4044,14 +4046,14 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.5.2' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.5.3' });
 
-    statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
-    document.getElementById('exp-results').style.display = 'block';
+    if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
+    if (resultsEl) resultsEl.style.display = 'block';
 
   } catch(error) {
     console.error('generate50Patterns error:', error);
-    statusEl.innerHTML = '<span style="color:#f44336;">❌ エラー: ' + error.message + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:#f44336;">❌ エラー: ' + error.message + '</span>';
   }
 }
 
@@ -4155,28 +4157,30 @@ function renderExperimental() {
   var schedule = getDrawSchedule();
   var targetDate = schedule.targetDraw;
   var dateStr = targetDate.getFullYear() + '-' + String(targetDate.getMonth()+1).padStart(2,'0') + '-' + String(targetDate.getDate()).padStart(2,'0');
+  var statusEl = document.getElementById('exp-status');
+  var resultsEl = document.getElementById('exp-results');
 
   if (!schedule.showPrediction) {
-    document.getElementById('exp-status').innerHTML =
+    if (statusEl) statusEl.innerHTML =
       '次回予測（第' + schedule.targetRound + '回）は抽選前日の12時から表示されます';
-    document.getElementById('exp-results').style.display = 'none';
+    if (resultsEl) resultsEl.style.display = 'none';
     renderExpHistory();
     return;
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.5.2') {
+  if (saved && saved.results && saved.version === 'v8.5.3') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
       displayExperimentalResults(saved.results, dateStr);
-      document.getElementById('exp-status').textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の保存済み' + total + 'パターン';
-      document.getElementById('exp-results').style.display = 'block';
+      if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の保存済み' + total + 'パターン';
+      if (resultsEl) resultsEl.style.display = 'block';
       renderExpHistory();
       return;
     }
   }
-  if (saved && saved.version !== 'v8.5.2') {
+  if (saved && saved.version !== 'v8.5.3') {
     LS.remove('exp_' + dateStr);
   }
 
@@ -4186,10 +4190,10 @@ function renderExperimental() {
 function resetExpData() {
   if (!confirm('保存済みの50パターン予測を全て削除します。よろしいですか？\n\n※メインの5パターン予測や当選履歴は影響を受けません。')) return;
   var status = document.getElementById('reset-exp-status');
-  status.textContent = '削除中...';
+  if (status) status.textContent = '削除中...';
   var keys = LS.keys().filter(function(k){return k.startsWith('exp_');});
   for (var i = 0; i < keys.length; i++) LS.remove(keys[i]);
-  status.innerHTML = '<span style="color:#4CAF50;">✅ ' + keys.length + '件の実験データを削除しました</span>';
+  if (status) status.innerHTML = '<span style="color:#4CAF50;">✅ ' + keys.length + '件の実験データを削除しました</span>';
 }
 
 function renderExpHistory() {
