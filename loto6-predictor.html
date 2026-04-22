@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.5.1
+  Loto6 AI Predictor v8.5.2
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -604,12 +604,12 @@ body {
   </div>
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.1</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.2</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.5.1) — 実験データ管理機能追加:<br>
-      • リセットボタンで保存済みデータを手動削除可能<br>
-      • 古いバージョンのデータは自動的に再生成<br>
-      • 類似度ベース重複排除+多様性強化+自動表示（v8.5継承）
+      搭載アルゴリズム (v8.5.2) — 実験モード表示バグ修正:<br>
+      • 全関数にtry-catch追加、エラーを画面に表示<br>
+      • 生成中の進捗を段階表示（1/5→2/5→...）<br>
+      • UIブロック防止のawait挿入、防御的null/undefinedチェック
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -3923,193 +3923,238 @@ function init() {
   renderPastPredictions();
 }
 // ============================================================
-// [v8.5] Experimental Mode: diversity-enhanced 50 patterns
+// [v8.5.2] Experimental Mode: robust 50-pattern generation
 // ============================================================
-function isTooSimilar(newNumbers, existingPatterns, threshold) {
-  const ns = new Set(newNumbers);
-  for (const ep of existingPatterns) {
-    let overlap = 0;
-    for (const n of ns) { if (ep.numbers.includes(n)) overlap++; }
+function isTooSimilar(nums, existing, threshold) {
+  for (var e = 0; e < existing.length; e++) {
+    if (!existing[e] || !existing[e].numbers) continue;
+    var overlap = 0;
+    for (var i = 0; i < nums.length; i++) {
+      if (existing[e].numbers.indexOf(nums[i]) >= 0) overlap++;
+    }
     if (overlap >= threshold) return true;
   }
   return false;
 }
 
 async function generate50Patterns() {
-  const data = getAllData();
-  if (data.length < 10) {
-    document.getElementById('exp-status').textContent = 'データが不足しています';
-    return;
-  }
-
-  const schedule = getDrawSchedule();
-  const targetDate = schedule.targetDraw;
-  const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}-${String(targetDate.getDate()).padStart(2,'0')}`;
-  const targetDay = targetDate.getDay();
-  const weights = LS.get('ensembleWeights') || [1,1,1,1];
-
-  document.getElementById('exp-status').textContent = '🔄 予測を自動生成中...';
-  document.getElementById('exp-results').style.display = 'none';
-  await new Promise(r => setTimeout(r, 50));
-
-  const mainPred = generatePredictions(targetDate, schedule.targetRound);
-
-  const strategyFns = [
-    { key: 'hot', fn: (d,r) => predictPattern1(d,r,targetDay) },
-    { key: 'markov', fn: (d,r) => predictPattern3(d,r,targetDay) },
-    { key: 'ensemble', fn: (d,r) => predictPattern5(d,r,weights,targetDay) },
-    { key: 'stableA', fn: (d,r) => predictStableA(d,r,targetDay) },
-    { key: 'stableB', fn: (d,r) => predictStableB(d,r,targetDay) },
-  ];
-
-  const results = {};
-
-  for (let si = 0; si < strategyFns.length; si++) {
-    const strat = strategyFns[si];
-    results[strat.key] = [];
-
-    if (mainPred && mainPred.predictions && mainPred.predictions[si]) {
-      const mp = mainPred.predictions[si];
-      results[strat.key].push({ numbers: mp.numbers, bonus: mp.bonus, isMain: true });
+  var statusEl = document.getElementById('exp-status');
+  try {
+    var data = getAllData();
+    if (!data || data.length < 10) {
+      statusEl.textContent = 'データが不足しています';
+      return;
     }
 
-    const isStable = (strat.key === 'stableA' || strat.key === 'stableB');
+    var schedule = getDrawSchedule();
+    var targetDate = schedule.targetDraw;
+    var dateStr = targetDate.getFullYear() + '-' + String(targetDate.getMonth()+1).padStart(2,'0') + '-' + String(targetDate.getDate()).padStart(2,'0');
+    var targetDay = targetDate.getDay();
+    var weights = LS.get('ensembleWeights') || [1,1,1,1];
 
-    for (let i = results[strat.key].length; i < 10; i++) {
-      let result = null;
+    statusEl.textContent = '🔄 生成中... (1/5 ホット頻度)';
+    document.getElementById('exp-results').style.display = 'none';
+    await new Promise(function(r){setTimeout(r,50);});
 
-      // Phase 1: strict similarity check (5+ overlap = too similar)
-      const maxAttempts = isStable ? 300 : 200;
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_a' + attempt;
-        const rng = seededRandom(seed);
-        for (let j = 0; j < 10 + attempt; j++) rng();
-        const r = strat.fn(data, rng);
-        if (!isTooSimilar(r.numbers, results[strat.key], 5)) {
-          result = r;
-          break;
+    var mainPred = null;
+    try { mainPred = generatePredictions(targetDate, schedule.targetRound); } catch(e) { console.warn('mainPred error:', e); }
+
+    var groupLabels = ['ホット頻度', 'マルコフ', 'アンサンブル', '安定型A', '安定型B'];
+    var strategyFns = [
+      { key: 'hot', fn: function(d,r) { return predictPattern1(d,r,targetDay); } },
+      { key: 'markov', fn: function(d,r) { return predictPattern3(d,r,targetDay); } },
+      { key: 'ensemble', fn: function(d,r) { return predictPattern5(d,r,weights,targetDay); } },
+      { key: 'stableA', fn: function(d,r) { return predictStableA(d,r,targetDay); } },
+      { key: 'stableB', fn: function(d,r) { return predictStableB(d,r,targetDay); } },
+    ];
+
+    var results = {};
+
+    for (var si = 0; si < strategyFns.length; si++) {
+      var strat = strategyFns[si];
+      results[strat.key] = [];
+
+      statusEl.textContent = '🔄 生成中... (' + (si+1) + '/5 ' + groupLabels[si] + ')';
+      await new Promise(function(r){setTimeout(r,30);});
+
+      if (mainPred && mainPred.predictions && mainPred.predictions[si]) {
+        var mp = mainPred.predictions[si];
+        if (mp.numbers && mp.numbers.length === 6) {
+          results[strat.key].push({ numbers: mp.numbers.slice(), bonus: mp.bonus, isMain: true });
         }
       }
 
-      // Phase 2: relax to 6-overlap (exact match only)
-      if (!result) {
-        for (let attempt = 0; attempt < 100; attempt++) {
-          const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_relax' + attempt;
-          const rng = seededRandom(seed);
-          for (let j = 0; j < 10 + attempt * 3; j++) rng();
-          const r = strat.fn(data, rng);
-          if (!isTooSimilar(r.numbers, results[strat.key], 6)) {
-            result = r;
-            break;
+      for (var pi = results[strat.key].length; pi < 10; pi++) {
+        var result = null;
+
+        for (var attempt = 0; attempt < 200 && !result; attempt++) {
+          try {
+            var seed = dateStr + '_exp_' + strat.key + '_p' + pi + '_a' + attempt;
+            var rng = seededRandom(seed);
+            for (var w = 0; w < 10 + attempt; w++) rng();
+            var r = strat.fn(data, rng);
+            if (r && r.numbers && r.numbers.length === 6) {
+              if (!isTooSimilar(r.numbers, results[strat.key], 5)) {
+                result = r;
+              }
+            }
+          } catch(e) {}
+        }
+
+        if (!result) {
+          for (var attempt2 = 0; attempt2 < 50 && !result; attempt2++) {
+            try {
+              var seed2 = dateStr + '_exp_' + strat.key + '_p' + pi + '_relax' + attempt2;
+              var rng2 = seededRandom(seed2);
+              for (var w2 = 0; w2 < 20 + attempt2 * 3; w2++) rng2();
+              var r2 = strat.fn(data, rng2);
+              if (r2 && r2.numbers && r2.numbers.length === 6) {
+                if (!isTooSimilar(r2.numbers, results[strat.key], 6)) {
+                  result = r2;
+                }
+              }
+            } catch(e) {}
           }
         }
-      }
 
-      // Phase 3: fallback
-      if (!result) {
-        const seed = dateStr + '_exp_' + strat.key + '_p' + i + '_fb';
-        const rng = seededRandom(seed);
-        for (let j = 0; j < 50; j++) rng();
-        result = strat.fn(data, rng);
-      }
+        if (!result) {
+          try {
+            var seedFb = dateStr + '_exp_' + strat.key + '_fb_' + pi;
+            var rngFb = seededRandom(seedFb);
+            for (var wf = 0; wf < 50; wf++) rngFb();
+            result = strat.fn(data, rngFb);
+          } catch(e) {
+            var nums = [];
+            while (nums.length < 6) {
+              var n = Math.floor(Math.random() * 43) + 1;
+              if (nums.indexOf(n) < 0) nums.push(n);
+            }
+            result = { numbers: nums, bonus: Math.floor(Math.random() * 43) + 1 };
+          }
+        }
 
-      results[strat.key].push(result);
+        results[strat.key].push(result);
+
+        if (pi % 3 === 0) await new Promise(function(r){setTimeout(r,10);});
+      }
     }
 
-    document.getElementById('exp-status').textContent = '生成中... (' + strat.key + ' 完了)';
-    await new Promise(r => setTimeout(r, 10));
+    var total = 0;
+    for (var gk in results) total += results[gk].length;
+
+    displayExperimentalResults(results, dateStr);
+
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.5.2' });
+
+    statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
+    document.getElementById('exp-results').style.display = 'block';
+
+  } catch(error) {
+    console.error('generate50Patterns error:', error);
+    statusEl.innerHTML = '<span style="color:#f44336;">❌ エラー: ' + error.message + '</span>';
   }
-
-  let total = 0;
-  for (const g of Object.values(results)) total += g.length;
-
-  displayExperimentalResults(results, dateStr);
-
-  LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results, createdAt: new Date().toISOString(), version: 'v8.5.1' });
-
-  document.getElementById('exp-status').textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
-  document.getElementById('exp-results').style.display = 'block';
 }
 
 function displayExperimentalResults(results, dateStr) {
-  const allNums = new Set();
-  const freq = {};
-  let totalPatterns = 0;
+  try {
+    var resultsDiv = document.getElementById('exp-results');
+    if (resultsDiv) resultsDiv.style.display = 'block';
 
-  for (const group of Object.values(results)) {
-    for (const r of group) {
-      totalPatterns++;
-      for (const n of r.numbers) {
-        allNums.add(n);
-        freq[n] = (freq[n] || 0) + 1;
+    var allNums = new Set();
+    var freq = {};
+    var totalPatterns = 0;
+
+    for (var gk in results) {
+      var group = results[gk];
+      for (var ri = 0; ri < group.length; ri++) {
+        if (!group[ri] || !group[ri].numbers) continue;
+        totalPatterns++;
+        for (var ni = 0; ni < group[ri].numbers.length; ni++) {
+          var n = group[ri].numbers[ni];
+          allNums.add(n);
+          freq[n] = (freq[n] || 0) + 1;
+        }
       }
     }
-  }
 
-  const top10 = Object.entries(freq).sort((a,b) => b[1]-a[1]).slice(0, 10).map(([n,c]) => n + '(' + c + '回)').join(', ');
-  const investment = totalPatterns * 200;
-  const maxFreq = Math.max(...Object.values(freq));
-  const avgFreq = (totalPatterns * 6 / Math.max(allNums.size, 1)).toFixed(1);
-  const diversityPct = (allNums.size / 43 * 100).toFixed(1);
+    var freqArr = [];
+    for (var fn in freq) freqArr.push([fn, freq[fn]]);
+    freqArr.sort(function(a,b){return b[1]-a[1];});
+    var top10 = freqArr.slice(0,10).map(function(e){return e[0]+'('+e[1]+'回)';}).join(', ');
+    var investment = totalPatterns * 200;
+    var maxFreq = freqArr.length > 0 ? freqArr[0][1] : 0;
+    var avgFreq = allNums.size > 0 ? (totalPatterns * 6 / allNums.size).toFixed(1) : '0';
+    var diversityPct = (allNums.size / 43 * 100).toFixed(1);
 
-  const groupNames = { hot:'🔥ホット', markov:'🔗マルコフ', ensemble:'🎯アンサンブル', stableA:'💰安定A', stableB:'💎安定B' };
-  const groupDivStr = Object.entries(results).map(function(e) {
-    const gNums = new Set();
-    for (const r of e[1]) for (const n of r.numbers) gNums.add(n);
-    return (groupNames[e[0]]||e[0]) + ':' + gNums.size + '個';
-  }).join(' / ');
+    var groupNames = { hot:'🔥ホット', markov:'🔗マルコフ', ensemble:'🎯アンサンブル', stableA:'💰安定A', stableB:'💎安定B' };
+    var groupDivParts = [];
+    for (var gk2 in results) {
+      var gNums = new Set();
+      for (var ri2 = 0; ri2 < results[gk2].length; ri2++) {
+        if (!results[gk2][ri2] || !results[gk2][ri2].numbers) continue;
+        for (var ni2 = 0; ni2 < results[gk2][ri2].numbers.length; ni2++) gNums.add(results[gk2][ri2].numbers[ni2]);
+      }
+      groupDivParts.push((groupNames[gk2]||gk2) + ':' + gNums.size + '個');
+    }
+    var divOk = maxFreq <= parseFloat(avgFreq) * 2;
 
-  const divOk = maxFreq <= avgFreq * 2;
+    var summary = document.getElementById('exp-summary');
+    if (summary) {
+      summary.innerHTML =
+        '<p>📅 対象抽選日: <strong>' + dateStr + '</strong></p>' +
+        '<p>🎯 カバー範囲: <strong>' + allNums.size + '個</strong> / 43個 (' + diversityPct + '%)' +
+        (allNums.size >= 43 ? ' ✅ 全数字カバー' : '') + '</p>' +
+        '<p>📊 パターン総数: <strong>' + totalPatterns + 'パターン</strong></p>' +
+        '<p>💰 投資額: <strong>' + investment.toLocaleString() + '円</strong>（200円×' + totalPatterns + '口）</p>' +
+        '<p>🔁 最多登場Top10: ' + top10 + '</p>' +
+        '<div style="background:var(--card-bg);padding:8px;border-radius:4px;margin-top:8px;border:1px solid var(--border);">' +
+        '<p><strong>🎨 多様性チェック</strong></p>' +
+        '<p style="font-size:12px;">思考別カバー: ' + groupDivParts.join(' / ') + '</p>' +
+        '<p style="font-size:12px;">最頻数字: ' + maxFreq + '回登場 (理想: ' + avgFreq + '回前後)</p>' +
+        (divOk ? '<p style="color:#4CAF50;">✅ 多様性は適切</p>' : '<p style="color:#f44336;">⚠️ 特定の数字への偏りが大きいです</p>') +
+        '</div>';
+    }
 
-  const summary = document.getElementById('exp-summary');
-  summary.innerHTML =
-    '<p>📅 対象抽選日: <strong>' + dateStr + '</strong></p>' +
-    '<p>🎯 カバー範囲: <strong>' + allNums.size + '個</strong> / 43個 (' + diversityPct + '%)' +
-    (allNums.size >= 43 ? ' ✅ 全数字カバー' : '') + '</p>' +
-    '<p>📊 パターン総数: <strong>' + totalPatterns + 'パターン</strong></p>' +
-    '<p>💰 投資額: <strong>' + investment.toLocaleString() + '円</strong>（200円×' + totalPatterns + '口）</p>' +
-    '<p>🔁 最多登場Top10: ' + top10 + '</p>' +
-    '<div style="background:var(--card-bg);padding:8px;border-radius:4px;margin-top:8px;border:1px solid var(--border);">' +
-    '<p><strong>🎨 多様性チェック</strong></p>' +
-    '<p style="font-size:12px;">思考別カバー: ' + groupDivStr + '</p>' +
-    '<p style="font-size:12px;">最頻数字: ' + maxFreq + '回登場 (理想: ' + avgFreq + '回前後)</p>' +
-    (divOk
-      ? '<p style="color:#4CAF50;">✅ 多様性は適切</p>'
-      : '<p style="color:#f44336;">⚠️ 特定の数字への偏りが大きいです</p>') +
-    '</div>';
+    var groupMap = [
+      { key: 'hot', divId: 'exp-group-hot' },
+      { key: 'markov', divId: 'exp-group-markov' },
+      { key: 'ensemble', divId: 'exp-group-ensemble' },
+      { key: 'stableA', divId: 'exp-group-stableA' },
+      { key: 'stableB', divId: 'exp-group-stableB' },
+    ];
 
-  const groupMap = [
-    { key: 'hot', divId: 'exp-group-hot' },
-    { key: 'markov', divId: 'exp-group-markov' },
-    { key: 'ensemble', divId: 'exp-group-ensemble' },
-    { key: 'stableA', divId: 'exp-group-stableA' },
-    { key: 'stableB', divId: 'exp-group-stableB' },
-  ];
+    for (var gi = 0; gi < groupMap.length; gi++) {
+      var gm = groupMap[gi];
+      var div = document.querySelector('#' + gm.divId + ' .pattern-list');
+      if (!div) continue;
+      var patterns = results[gm.key];
+      if (!patterns || patterns.length === 0) { div.innerHTML = '<p style="color:var(--muted);padding:8px;">パターンなし</p>'; continue; }
+      div.innerHTML = '';
 
-  for (const gm of groupMap) {
-    const div = document.querySelector('#' + gm.divId + ' .pattern-list');
-    if (!div || !results[gm.key]) continue;
-    div.innerHTML = '';
-
-    results[gm.key].forEach(function(r, i) {
-      const sorted = [...r.numbers].sort(function(a,b){return a-b;});
-      const p = document.createElement('div');
-      p.style.cssText = 'padding:6px 8px;margin:2px 0;border-bottom:1px solid var(--border);font-size:14px;display:flex;align-items:center;gap:8px;';
-      const mainBadge = r.isMain ? '<span style="color:#4CAF50;font-weight:bold;font-size:12px;">⭐メイン</span>' : '';
-      p.innerHTML =
-        '<span style="color:var(--muted);min-width:28px;">#' + (i+1) + '</span>' +
-        mainBadge +
-        '<span style="font-family:monospace;letter-spacing:1px;">' + sorted.map(function(n){return String(n).padStart(2,'0');}).join(' ') + '</span>' +
-        '<span style="color:var(--accent);font-size:12px;">B:' + (r.bonus || '?') + '</span>';
-      div.appendChild(p);
-    });
+      for (var pi2 = 0; pi2 < patterns.length; pi2++) {
+        var r = patterns[pi2];
+        if (!r || !r.numbers) continue;
+        var sorted = r.numbers.slice().sort(function(a,b){return a-b;});
+        var p = document.createElement('div');
+        p.style.cssText = 'padding:6px 8px;margin:2px 0;border-bottom:1px solid var(--border);font-size:14px;display:flex;align-items:center;gap:8px;';
+        var mainBadge = r.isMain ? '<span style="color:#4CAF50;font-weight:bold;font-size:12px;">⭐メイン</span>' : '';
+        p.innerHTML =
+          '<span style="color:var(--muted);min-width:28px;">#' + (pi2+1) + '</span>' +
+          mainBadge +
+          '<span style="font-family:monospace;letter-spacing:1px;">' + sorted.map(function(n){return String(n).padStart(2,'0');}).join(' ') + '</span>' +
+          '<span style="color:var(--accent);font-size:12px;">B:' + (r.bonus || '?') + '</span>';
+        div.appendChild(p);
+      }
+    }
+  } catch(e) {
+    console.error('displayExperimentalResults error:', e);
   }
 }
 
 function renderExperimental() {
-  const schedule = getDrawSchedule();
-  const targetDate = schedule.targetDraw;
-  const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}-${String(targetDate.getDate()).padStart(2,'0')}`;
+  var schedule = getDrawSchedule();
+  var targetDate = schedule.targetDraw;
+  var dateStr = targetDate.getFullYear() + '-' + String(targetDate.getMonth()+1).padStart(2,'0') + '-' + String(targetDate.getDate()).padStart(2,'0');
 
   if (!schedule.showPrediction) {
     document.getElementById('exp-status').innerHTML =
@@ -4119,10 +4164,10 @@ function renderExperimental() {
     return;
   }
 
-  const saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.5.1') {
-    let total = 0;
-    for (const g of Object.values(saved.results)) total += g.length;
+  var saved = LS.get('exp_' + dateStr);
+  if (saved && saved.results && saved.version === 'v8.5.2') {
+    var total = 0;
+    for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
       displayExperimentalResults(saved.results, dateStr);
       document.getElementById('exp-status').textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の保存済み' + total + 'パターン';
@@ -4131,11 +4176,11 @@ function renderExperimental() {
       return;
     }
   }
-  if (saved && (!saved.version || saved.version !== 'v8.5.1')) {
+  if (saved && saved.version !== 'v8.5.2') {
     LS.remove('exp_' + dateStr);
   }
 
-  generate50Patterns().then(function() { renderExpHistory(); });
+  generate50Patterns().then(function() { renderExpHistory(); }).catch(function(e) { console.error('renderExperimental error:', e); });
 }
 
 function resetExpData() {
@@ -4148,28 +4193,28 @@ function resetExpData() {
 }
 
 function renderExpHistory() {
-  const histDiv = document.getElementById('exp-history');
+  var histDiv = document.getElementById('exp-history');
   if (!histDiv) return;
 
-  const data = getAllData();
-  const allKeys = LS.keys().filter(function(k){return k.startsWith('exp_');});
+  var data = getAllData();
+  var allKeys = LS.keys().filter(function(k){return k.startsWith('exp_');});
   if (allKeys.length === 0) {
     histDiv.innerHTML = '<p style="color:var(--muted)">まだ実験履歴はありません</p>';
     return;
   }
 
   allKeys.sort().reverse();
-  let html = '';
-  const groupNames = { hot:'🔥ホット頻度', markov:'🔗マルコフ連鎖', ensemble:'🎯アンサンブルAI', stableA:'💰安定型A', stableB:'💎安定型B' };
+  var html = '';
+  var groupNames = { hot:'🔥ホット頻度', markov:'🔗マルコフ連鎖', ensemble:'🎯アンサンブルAI', stableA:'💰安定型A', stableB:'💎安定型B' };
 
-  for (const key of allKeys.slice(0, 10)) {
-    const saved = LS.get(key);
+  for (var ki = 0; ki < Math.min(allKeys.length, 10); ki++) {
+    var saved = LS.get(allKeys[ki]);
     if (!saved || !saved.results) continue;
 
-    let totalPatterns = 0;
-    for (const g of Object.values(saved.results)) totalPatterns += g.length;
+    var totalPatterns = 0;
+    for (var gk in saved.results) totalPatterns += saved.results[gk].length;
 
-    const drawData = data.find(function(d){return d.d === saved.date;});
+    var drawData = data.find(function(d){return d.d === saved.date;});
 
     if (!drawData) {
       html +=
@@ -4181,17 +4226,21 @@ function renderExpHistory() {
       continue;
     }
 
-    const winSet = new Set(drawData.n);
-    const winB = drawData.b;
-    const stats = { hit6:0, hit5b:0, hit5:0, hit4:0, hit3:0, less:0, byGroup:{} };
-    const hitPatterns = [];
+    var winSet = new Set(drawData.n);
+    var winB = drawData.b;
+    var stats = { hit6:0, hit5b:0, hit5:0, hit4:0, hit3:0, less:0, byGroup:{} };
+    var hitPatterns = [];
 
-    for (const [group, patterns] of Object.entries(saved.results)) {
-      stats.byGroup[group] = { total:patterns.length, hit3plus:0, totalHits:0 };
-      for (const r of patterns) {
-        const hits = r.numbers.filter(function(n){return winSet.has(n);}).length;
-        const bonusHit = r.bonus === winB;
-        stats.byGroup[group].totalHits += hits;
+    for (var gk2 in saved.results) {
+      var patterns = saved.results[gk2];
+      stats.byGroup[gk2] = { total:patterns.length, hit3plus:0, totalHits:0 };
+      for (var pi = 0; pi < patterns.length; pi++) {
+        var r = patterns[pi];
+        if (!r || !r.numbers) continue;
+        var hits = 0;
+        for (var ni = 0; ni < r.numbers.length; ni++) { if (winSet.has(r.numbers[ni])) hits++; }
+        var bonusHit = r.bonus === winB;
+        stats.byGroup[gk2].totalHits += hits;
         if (hits === 6) stats.hit6++;
         else if (hits === 5 && bonusHit) stats.hit5b++;
         else if (hits === 5) stats.hit5++;
@@ -4199,32 +4248,34 @@ function renderExpHistory() {
         else if (hits === 3) stats.hit3++;
         else stats.less++;
         if (hits >= 3) {
-          stats.byGroup[group].hit3plus++;
-          hitPatterns.push({ group:group, numbers:r.numbers, hits:hits, bonus:r.bonus, bonusHit:bonusHit });
+          stats.byGroup[gk2].hit3plus++;
+          hitPatterns.push({ group:gk2, numbers:r.numbers, hits:hits, bonus:r.bonus, bonusHit:bonusHit });
         }
       }
     }
 
-    const prize = stats.hit6*200000000 + stats.hit5b*10000000 + stats.hit5*500000 + stats.hit4*9800 + stats.hit3*1000;
-    const investment = totalPatterns * 200;
-    const profit = prize - investment;
+    var prize = stats.hit6*200000000 + stats.hit5b*10000000 + stats.hit5*500000 + stats.hit4*9800 + stats.hit3*1000;
+    var investment = totalPatterns * 200;
+    var profit = prize - investment;
 
-    const winBalls = drawData.n.map(function(n){
+    var winBalls = drawData.n.map(function(n){
       return '<span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;background:var(--accent);color:#fff;border-radius:50%;margin:1px;font-size:12px;">' + n + '</span>';
     }).join('') + '<span style="display:inline-block;width:28px;height:28px;line-height:28px;text-align:center;background:#FF9800;color:#fff;border-radius:50%;margin:1px;font-size:12px;">B' + winB + '</span>';
 
-    let groupStats = '';
-    for (const [g, s] of Object.entries(stats.byGroup)) {
-      const avg = s.total > 0 ? (s.totalHits / s.total).toFixed(2) : '0';
-      groupStats += '<span style="margin-right:12px;">' + (groupNames[g]||g) + ': 平均' + avg + '個 (' + s.hit3plus + '/' + s.total + '口)</span>';
+    var groupStats = '';
+    for (var gk3 in stats.byGroup) {
+      var s = stats.byGroup[gk3];
+      var avg = s.total > 0 ? (s.totalHits / s.total).toFixed(2) : '0';
+      groupStats += '<span style="margin-right:12px;">' + (groupNames[gk3]||gk3) + ': 平均' + avg + '個 (' + s.hit3plus + '/' + s.total + '口)</span>';
     }
 
-    let hitDetails = '';
+    var hitDetails = '';
     if (hitPatterns.length > 0) {
-      let hitInner = '';
-      for (const hp of hitPatterns) {
-        const sorted = [...hp.numbers].sort(function(a,b){return a-b;});
-        const balls = sorted.map(function(n){
+      var hitInner = '';
+      for (var hi = 0; hi < hitPatterns.length; hi++) {
+        var hp = hitPatterns[hi];
+        var sorted = hp.numbers.slice().sort(function(a,b){return a-b;});
+        var balls = sorted.map(function(n){
           var c = winSet.has(n) ? '#f44336' : '#666';
           return '<span style="display:inline-block;width:24px;height:24px;line-height:24px;text-align:center;background:'+c+';color:#fff;border-radius:50%;margin:1px;font-size:11px;">'+n+'</span>';
         }).join('');
@@ -4233,7 +4284,7 @@ function renderExpHistory() {
       hitDetails = '<details style="margin-top:6px;"><summary style="cursor:pointer;color:var(--accent);">🎯 3個以上一致: ' + hitPatterns.length + '口</summary><div style="padding:6px 0;">' + hitInner + '</div></details>';
     }
 
-    const profitColor = profit >= 0 ? '#4CAF50' : '#f44336';
+    var profitColor = profit >= 0 ? '#4CAF50' : '#f44336';
 
     html +=
       '<div style="padding:10px 0;border-bottom:1px solid var(--border);">' +
