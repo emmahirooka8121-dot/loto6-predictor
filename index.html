@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.5.3
+  Loto6 AI Predictor v8.5.4
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -604,12 +604,13 @@ body {
   </div>
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.3</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.4</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.5.3) — HTML要素ID不整合の修正:<br>
-      • 実験タブに欠落していたexp-resultsコンテナ要素を追加<br>
-      • 全てのgetElementById呼び出しにnullチェックを追加<br>
-      • バージョンベースのキャッシュ無効化をv8.5.3に更新
+      搭載アルゴリズム (v8.5.4) — 多様性の本格修正＋当選の色分け表示:<br>
+      • 完全一致パターンの排除を3段階で保証（最悪でも変動枠を強制変更）<br>
+      • 過去の実験結果で、当選数字を赤、外れを青で色分け表示<br>
+      • 思考別の折りたたみ表示で全50パターンを確認可能<br>
+      • 完全重複の検出機能を多様性チェックに追加
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -3924,14 +3925,30 @@ function init() {
   renderPastPredictions();
 }
 // ============================================================
-// [v8.5.3] Experimental Mode: robust 50-pattern generation
+// [v8.5.4] Experimental Mode: unique patterns + win highlighting
 // ============================================================
+function keyOf(numbers) {
+  return numbers.slice().sort(function(a,b){return a-b;}).join(',');
+}
+
+function isExactDuplicate(nums, existing) {
+  var key = keyOf(nums);
+  for (var e = 0; e < existing.length; e++) {
+    if (!existing[e] || !existing[e].numbers) continue;
+    if (keyOf(existing[e].numbers) === key) return true;
+  }
+  return false;
+}
+
 function isTooSimilar(nums, existing, threshold) {
+  if (!existing || existing.length === 0) return false;
+  var newMap = {};
+  for (var i = 0; i < nums.length; i++) newMap[nums[i]] = true;
   for (var e = 0; e < existing.length; e++) {
     if (!existing[e] || !existing[e].numbers) continue;
     var overlap = 0;
-    for (var i = 0; i < nums.length; i++) {
-      if (existing[e].numbers.indexOf(nums[i]) >= 0) overlap++;
+    for (var j = 0; j < existing[e].numbers.length; j++) {
+      if (newMap[existing[e].numbers[j]]) overlap++;
     }
     if (overlap >= threshold) return true;
   }
@@ -3986,7 +4003,8 @@ async function generate50Patterns() {
         }
       }
 
-      for (var pi = results[strat.key].length; pi < 10; pi++) {
+      while (results[strat.key].length < 10) {
+        var pi = results[strat.key].length;
         var result = null;
 
         for (var attempt = 0; attempt < 200 && !result; attempt++) {
@@ -4004,14 +4022,14 @@ async function generate50Patterns() {
         }
 
         if (!result) {
-          for (var attempt2 = 0; attempt2 < 50 && !result; attempt2++) {
+          for (var attempt2 = 0; attempt2 < 200 && !result; attempt2++) {
             try {
-              var seed2 = dateStr + '_exp_' + strat.key + '_p' + pi + '_relax' + attempt2;
+              var seed2 = dateStr + '_relax6_' + strat.key + '_p' + pi + '_a' + attempt2;
               var rng2 = seededRandom(seed2);
               for (var w2 = 0; w2 < 20 + attempt2 * 3; w2++) rng2();
               var r2 = strat.fn(data, rng2);
               if (r2 && r2.numbers && r2.numbers.length === 6) {
-                if (!isTooSimilar(r2.numbers, results[strat.key], 6)) {
+                if (!isExactDuplicate(r2.numbers, results[strat.key])) {
                   result = r2;
                 }
               }
@@ -4020,22 +4038,31 @@ async function generate50Patterns() {
         }
 
         if (!result) {
-          try {
-            var seedFb = dateStr + '_exp_' + strat.key + '_fb_' + pi;
-            var rngFb = seededRandom(seedFb);
-            for (var wf = 0; wf < 50; wf++) rngFb();
-            result = strat.fn(data, rngFb);
-          } catch(e) {
-            var nums = [];
-            while (nums.length < 6) {
-              var n = Math.floor(Math.random() * 43) + 1;
-              if (nums.indexOf(n) < 0) nums.push(n);
+          var lastPat = results[strat.key][results[strat.key].length - 1];
+          if (lastPat && lastPat.numbers) {
+            for (var attempt3 = 0; attempt3 < 100 && !result; attempt3++) {
+              var nums = lastPat.numbers.slice();
+              var numToChange = 1 + Math.floor(Math.random() * 2);
+              for (var kk = 0; kk < numToChange; kk++) {
+                var idx = Math.floor(Math.random() * 6);
+                var newNum;
+                do { newNum = 1 + Math.floor(Math.random() * 43); } while (nums.indexOf(newNum) >= 0);
+                nums[idx] = newNum;
+              }
+              nums.sort(function(a,b){return a-b;});
+              if (!isExactDuplicate(nums, results[strat.key])) {
+                result = { numbers: nums, bonus: lastPat.bonus };
+              }
             }
-            result = { numbers: nums, bonus: Math.floor(Math.random() * 43) + 1 };
           }
         }
 
-        results[strat.key].push(result);
+        if (result) {
+          results[strat.key].push(result);
+        } else {
+          console.error(strat.key + ' pattern ' + pi + ' could not be generated');
+          break;
+        }
 
         if (pi % 3 === 0) await new Promise(function(r){setTimeout(r,10);});
       }
@@ -4046,7 +4073,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.5.3' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.5.4' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -4090,18 +4117,37 @@ function displayExperimentalResults(results, dateStr) {
 
     var groupNames = { hot:'🔥ホット', markov:'🔗マルコフ', ensemble:'🎯アンサンブル', stableA:'💰安定A', stableB:'💎安定B' };
     var groupDivParts = [];
+    var dupWarnings = [];
     for (var gk2 in results) {
       var gNums = new Set();
+      var gKeys = {};
       for (var ri2 = 0; ri2 < results[gk2].length; ri2++) {
         if (!results[gk2][ri2] || !results[gk2][ri2].numbers) continue;
+        var pk = keyOf(results[gk2][ri2].numbers);
+        gKeys[pk] = (gKeys[pk] || 0) + 1;
         for (var ni2 = 0; ni2 < results[gk2][ri2].numbers.length; ni2++) gNums.add(results[gk2][ri2].numbers[ni2]);
       }
       groupDivParts.push((groupNames[gk2]||gk2) + ':' + gNums.size + '個');
+      var uniqueCount = 0;
+      var dupCount = 0;
+      for (var pkk in gKeys) {
+        uniqueCount++;
+        if (gKeys[pkk] > 1) dupCount++;
+      }
+      if (dupCount > 0) {
+        dupWarnings.push((groupNames[gk2]||gk2) + ':ユニーク' + uniqueCount + '種(重複' + dupCount + '種)');
+      }
     }
     var divOk = maxFreq <= parseFloat(avgFreq) * 2;
 
     var summary = document.getElementById('exp-summary');
     if (summary) {
+      var dupHtml = '';
+      if (dupWarnings.length > 0) {
+        dupHtml = '<p style="color:#f44336;">⚠️ 完全重複あり: ' + dupWarnings.join(' / ') + '</p>';
+      } else {
+        dupHtml = '<p style="color:#4CAF50;">✅ 全パターンがユニーク</p>';
+      }
       summary.innerHTML =
         '<p>📅 対象抽選日: <strong>' + dateStr + '</strong></p>' +
         '<p>🎯 カバー範囲: <strong>' + allNums.size + '個</strong> / 43個 (' + diversityPct + '%)' +
@@ -4114,6 +4160,7 @@ function displayExperimentalResults(results, dateStr) {
         '<p style="font-size:12px;">思考別カバー: ' + groupDivParts.join(' / ') + '</p>' +
         '<p style="font-size:12px;">最頻数字: ' + maxFreq + '回登場 (理想: ' + avgFreq + '回前後)</p>' +
         (divOk ? '<p style="color:#4CAF50;">✅ 多様性は適切</p>' : '<p style="color:#f44336;">⚠️ 特定の数字への偏りが大きいです</p>') +
+        dupHtml +
         '</div>';
     }
 
@@ -4134,17 +4181,17 @@ function displayExperimentalResults(results, dateStr) {
       div.innerHTML = '';
 
       for (var pi2 = 0; pi2 < patterns.length; pi2++) {
-        var r = patterns[pi2];
-        if (!r || !r.numbers) continue;
-        var sorted = r.numbers.slice().sort(function(a,b){return a-b;});
+        var rr = patterns[pi2];
+        if (!rr || !rr.numbers) continue;
+        var sorted = rr.numbers.slice().sort(function(a,b){return a-b;});
         var p = document.createElement('div');
         p.style.cssText = 'padding:6px 8px;margin:2px 0;border-bottom:1px solid var(--border);font-size:14px;display:flex;align-items:center;gap:8px;';
-        var mainBadge = r.isMain ? '<span style="color:#4CAF50;font-weight:bold;font-size:12px;">⭐メイン</span>' : '';
+        var mainBadge = rr.isMain ? '<span style="color:#4CAF50;font-weight:bold;font-size:12px;">⭐メイン</span>' : '';
         p.innerHTML =
           '<span style="color:var(--muted);min-width:28px;">#' + (pi2+1) + '</span>' +
           mainBadge +
           '<span style="font-family:monospace;letter-spacing:1px;">' + sorted.map(function(n){return String(n).padStart(2,'0');}).join(' ') + '</span>' +
-          '<span style="color:var(--accent);font-size:12px;">B:' + (r.bonus || '?') + '</span>';
+          '<span style="color:var(--accent);font-size:12px;">B:' + (rr.bonus || '?') + '</span>';
         div.appendChild(p);
       }
     }
@@ -4169,7 +4216,7 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.5.3') {
+  if (saved && saved.results && saved.version === 'v8.5.4') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
@@ -4180,7 +4227,7 @@ function renderExperimental() {
       return;
     }
   }
-  if (saved && saved.version !== 'v8.5.3') {
+  if (saved && saved.version !== 'v8.5.4') {
     LS.remove('exp_' + dateStr);
   }
 
@@ -4210,6 +4257,7 @@ function renderExpHistory() {
   allKeys.sort().reverse();
   var html = '';
   var groupNames = { hot:'🔥ホット頻度', markov:'🔗マルコフ連鎖', ensemble:'🎯アンサンブルAI', stableA:'💰安定型A', stableB:'💎安定型B' };
+  var groupKeys = ['hot','markov','ensemble','stableA','stableB'];
 
   for (var ki = 0; ki < Math.min(allKeys.length, 10); ki++) {
     var saved = LS.get(allKeys[ki]);
@@ -4233,7 +4281,6 @@ function renderExpHistory() {
     var winSet = new Set(drawData.n);
     var winB = drawData.b;
     var stats = { hit6:0, hit5b:0, hit5:0, hit4:0, hit3:0, less:0, byGroup:{} };
-    var hitPatterns = [];
 
     for (var gk2 in saved.results) {
       var patterns = saved.results[gk2];
@@ -4251,10 +4298,7 @@ function renderExpHistory() {
         else if (hits === 4) stats.hit4++;
         else if (hits === 3) stats.hit3++;
         else stats.less++;
-        if (hits >= 3) {
-          stats.byGroup[gk2].hit3plus++;
-          hitPatterns.push({ group:gk2, numbers:r.numbers, hits:hits, bonus:r.bonus, bonusHit:bonusHit });
-        }
+        if (hits >= 3) stats.byGroup[gk2].hit3plus++;
       }
     }
 
@@ -4273,21 +4317,6 @@ function renderExpHistory() {
       groupStats += '<span style="margin-right:12px;">' + (groupNames[gk3]||gk3) + ': 平均' + avg + '個 (' + s.hit3plus + '/' + s.total + '口)</span>';
     }
 
-    var hitDetails = '';
-    if (hitPatterns.length > 0) {
-      var hitInner = '';
-      for (var hi = 0; hi < hitPatterns.length; hi++) {
-        var hp = hitPatterns[hi];
-        var sorted = hp.numbers.slice().sort(function(a,b){return a-b;});
-        var balls = sorted.map(function(n){
-          var c = winSet.has(n) ? '#f44336' : '#666';
-          return '<span style="display:inline-block;width:24px;height:24px;line-height:24px;text-align:center;background:'+c+';color:#fff;border-radius:50%;margin:1px;font-size:11px;">'+n+'</span>';
-        }).join('');
-        hitInner += '<div style="margin:3px 0;">' + (groupNames[hp.group]||hp.group) + ': ' + balls + ' B:' + hp.bonus + (hp.bonusHit?'✨':'') + ' → <strong>' + hp.hits + '個</strong></div>';
-      }
-      hitDetails = '<details style="margin-top:6px;"><summary style="cursor:pointer;color:var(--accent);">🎯 3個以上一致: ' + hitPatterns.length + '口</summary><div style="padding:6px 0;">' + hitInner + '</div></details>';
-    }
-
     var profitColor = profit >= 0 ? '#4CAF50' : '#f44336';
 
     html +=
@@ -4299,9 +4328,53 @@ function renderExpHistory() {
         '<span style="margin-left:12px;color:' + profitColor + ';font-weight:bold;">収支: ' + (profit>=0?'+':'') + profit.toLocaleString() + '円</span>' +
         ' <span style="color:var(--muted);">(投資' + investment.toLocaleString() + '円 / 当選' + prize.toLocaleString() + '円)</span>' +
       '</div>' +
-      '<div style="margin-top:4px;font-size:12px;color:var(--muted);line-height:1.6;">' + groupStats + '</div>' +
-      hitDetails +
-      '</div>';
+      '<div style="margin-top:4px;font-size:12px;color:var(--muted);line-height:1.6;">' + groupStats + '</div>';
+
+    for (var gki = 0; gki < groupKeys.length; gki++) {
+      var gKey = groupKeys[gki];
+      var gPatterns = saved.results[gKey];
+      if (!gPatterns || gPatterns.length === 0) continue;
+
+      var gTotalHits = stats.byGroup[gKey] ? stats.byGroup[gKey].totalHits : 0;
+      var gAvg = gPatterns.length > 0 ? (gTotalHits / gPatterns.length).toFixed(2) : '0';
+      var gHit3 = stats.byGroup[gKey] ? stats.byGroup[gKey].hit3plus : 0;
+
+      var detailInner = '';
+      for (var dpi = 0; dpi < gPatterns.length; dpi++) {
+        var dp = gPatterns[dpi];
+        if (!dp || !dp.numbers) continue;
+        var dSorted = dp.numbers.slice().sort(function(a,b){return a-b;});
+        var dHits = 0;
+        for (var dni = 0; dni < dSorted.length; dni++) { if (winSet.has(dSorted[dni])) dHits++; }
+        var dBonusHit = dp.bonus === winB;
+
+        var ballsHtml = '';
+        for (var bi = 0; bi < dSorted.length; bi++) {
+          var isHit = winSet.has(dSorted[bi]);
+          var bgCol = isHit ? '#f44336' : '#2196F3';
+          ballsHtml += '<span style="display:inline-block;width:26px;height:26px;line-height:26px;text-align:center;background:'+bgCol+';color:#fff;border-radius:50%;margin:1px;font-size:11px;font-weight:bold;">'+dSorted[bi]+'</span>';
+        }
+
+        var bBgCol = dBonusHit ? '#f44336' : '#999';
+        var bonusHtml = '<span style="display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;background:'+bBgCol+';color:#fff;border-radius:50%;margin-left:4px;font-size:9px;">B'+dp.bonus+'</span>';
+
+        var badge = '';
+        if (dHits >= 3) badge = ' <span style="background:#4CAF50;color:#fff;padding:1px 5px;border-radius:3px;font-size:10px;">'+dHits+'個一致🏆</span>';
+        else if (dHits === 2) badge = ' <span style="color:#FF9800;font-size:10px;">'+dHits+'個</span>';
+
+        var mainTag = dp.isMain ? ' <span style="color:#4CAF50;font-weight:bold;font-size:10px;">⭐</span>' : '';
+
+        detailInner += '<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+          '<span style="color:var(--muted);min-width:24px;display:inline-block;">#'+(dpi+1)+'</span>' +
+          mainTag + ballsHtml + bonusHtml + badge + '</div>';
+      }
+
+      html += '<details style="margin-top:4px;"><summary style="cursor:pointer;color:var(--accent);font-size:13px;">' +
+        (groupNames[gKey]||gKey) + ' 平均' + gAvg + '個 / 5等以上:' + gHit3 + '口' +
+        '</summary><div style="padding:4px 0;">' + detailInner + '</div></details>';
+    }
+
+    html += '</div>';
   }
 
   histDiv.innerHTML = html || '<p style="color:var(--muted)">まだ実験履歴はありません</p>';
