@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.5.4
+  Loto6 AI Predictor v8.6
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -414,6 +414,9 @@ body {
   <div class="sub">統計的分析アルゴリズムによるロト6予測</div>
 </div>
 
+<!-- Integrity Warning Banner -->
+<div id="integrityBanner" style="display:none;background:#FFF3E0;color:#E65100;padding:10px 16px;font-size:13px;font-weight:bold;border-bottom:2px solid #FF9800;text-align:center;cursor:pointer;" onclick="switchTab(5)"></div>
+
 <!-- Tab 0: Main Prediction / Countdown -->
 <div class="tab-content active" id="tab0">
   <div id="mainContent"></div>
@@ -498,6 +501,22 @@ body {
   <div class="card">
     <div class="card-title">🚫 不可能パターンフィルタ</div>
     <div id="filterStats" style="font-size:13px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📈 動的統計パラメータ</div>
+    <div class="toggle-group" style="margin-bottom:8px;">
+      <button class="toggle-btn active" onclick="renderDynamicStats('full');this.parentNode.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">全期間</button>
+      <button class="toggle-btn" onclick="renderDynamicStats('era1');this.parentNode.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">週1回時代</button>
+      <button class="toggle-btn" onclick="renderDynamicStats('era2');this.parentNode.querySelectorAll('.toggle-btn').forEach(b=>b.classList.remove('active'));this.classList.add('active')">週2回時代</button>
+    </div>
+    <div id="dynamicStatsContent" style="font-size:13px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔬 マルコフ連鎖の分解検証</div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:8px">マルコフ連鎖予測の構成要素を個別に倍率測定し、有効な要素を特定します。</p>
+    <div id="markovDecompContent" style="font-size:13px"></div>
   </div>
 </div>
 
@@ -602,15 +621,31 @@ body {
     <button class="btn btn-danger" onclick="resetExpData()" style="width:100%">🔄 実験データを全てリセット</button>
     <div id="reset-exp-status" style="margin-top:8px;font-size:13px"></div>
   </div>
+
+  <div class="card">
+    <div class="card-title">🔍 データ整合性チェック</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:8px">全当選データをスキャンし、ボーナス重複・範囲外・欠損等の異常を検出します。</p>
+    <button class="btn btn-secondary" onclick="renderIntegrityCheck()" style="width:100%">🔍 整合性チェック実行</button>
+    <div id="integrity-result" style="margin-top:8px;font-size:13px"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📊 統計の手動再計算</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:8px">最新データに基づき全統計パラメータを再計算します。通常はデータ追加時に自動実行されます。</p>
+    <button class="btn btn-secondary" onclick="renderDynamicStats('full');showMsg('recalcStatus','統計を再計算しました','success')" style="width:100%">🔄 統計を再計算</button>
+    <div id="recalcStatus" style="margin-top:8px;font-size:13px"></div>
+  </div>
+
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.5.4</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.6</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.5.4) — 多様性の本格修正＋当選の色分け表示:<br>
-      • 完全一致パターンの排除を3段階で保証（最悪でも変動枠を強制変更）<br>
-      • 過去の実験結果で、当選数字を赤、外れを青で色分け表示<br>
-      • 思考別の折りたたみ表示で全50パターンを確認可能<br>
-      • 完全重複の検出機能を多様性チェックに追加
+      搭載アルゴリズム (v8.6) — 統計的基盤の動的化と最新データ対応:<br>
+      • データ整合性チェック機能（起動時自動+設定タブから手動実行）<br>
+      • 全パラメータ倍率の動的再計算（データ追加時自動更新）<br>
+      • 週1回/週2回時代の統計比較（有意差ハイライト）<br>
+      • マルコフ連鎖の分解検証（各構成要素の有効性判定）<br>
+      • 合計値95%信頼区間フィルタ（極端パターン除外）
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -1597,6 +1632,12 @@ function isImpossibleCombo(combo) {
   // [v8-A6] Filter 9: Low/High 0:6 or 6:0 (2.3% of combos)
   const lowCount = sorted.filter(n => n <= 22).length;
   if (lowCount === 0 || lowCount === 6) return true;
+
+  // [v8.6-A10] Filter 10: Sum value outside 95% confidence interval
+  if (_sumFilterRange) {
+    const fSum = sorted.reduce((a,b) => a+b, 0);
+    if (fSum < _sumFilterRange.p5 || fSum > _sumFilterRange.p95) return true;
+  }
 
   return false;
 }
@@ -2926,6 +2967,8 @@ function renderStats() {
   renderDistCharts();
   renderAdvancedStats();
   renderFilterStats();
+  renderDynamicStats('full');
+  renderMarkovDecomp();
 }
 
 function renderFilterStats() {
@@ -3464,8 +3507,9 @@ function addResult() {
   custom.push(entry);
   LS.set('customData', custom);
 
-  // Update weights after adding result
+  // Update weights and stats after adding result
   updateWeights();
+  updateSumFilter();
 
   showMsg('addResultMsg', `第${roundVal}回を追加しました`, 'success');
 
@@ -3920,12 +3964,467 @@ function regeneratePrediction() {
 
 // === INITIALIZATION ===
 function init() {
+  updateSumFilter();
   updateWeights();
   renderMain();
   renderPastPredictions();
+  showIntegrityWarning();
 }
 // ============================================================
-// [v8.5.4] Experimental Mode: unique patterns + win highlighting
+// [v8.6] Dynamic Stats Engine + Data Integrity + Era Analysis
+// ============================================================
+
+// --- Item 1: Data Integrity Check ---
+function checkDataIntegrity() {
+  var data = getAllData();
+  var issues = [];
+  var prevDate = null;
+  for (var i = 0; i < data.length; i++) {
+    var d = data[i];
+    var rid = d.id;
+    // Check numbers count
+    if (!d.n || d.n.length !== 6) {
+      issues.push({ round: rid, type: 'count', msg: '本数字が6個ではありません (' + (d.n ? d.n.length : 0) + '個)' });
+    }
+    // Check range
+    if (d.n) {
+      for (var j = 0; j < d.n.length; j++) {
+        if (d.n[j] < 1 || d.n[j] > 43) {
+          issues.push({ round: rid, type: 'range', msg: '範囲外の数字: ' + d.n[j] });
+        }
+      }
+      // Check duplicate main numbers
+      var ns = new Set(d.n);
+      if (ns.size !== d.n.length) {
+        issues.push({ round: rid, type: 'dup_main', msg: '本数字に重複があります: [' + d.n.join(',') + ']' });
+      }
+      // Check bonus overlaps main
+      if (d.b && ns.has(d.b)) {
+        issues.push({ round: rid, type: 'bonus_dup', msg: 'ボーナス(' + d.b + ')が本数字と重複' });
+      }
+    }
+    // Check bonus range
+    if (d.b !== undefined && d.b !== null && (d.b < 1 || d.b > 43)) {
+      issues.push({ round: rid, type: 'bonus_range', msg: 'ボーナス番号が範囲外: ' + d.b });
+    }
+    // Check date order
+    if (d.d && prevDate && d.d < prevDate) {
+      issues.push({ round: rid, type: 'date_order', msg: '日付が前回(' + prevDate + ')より古い: ' + d.d });
+    }
+    if (d.d) prevDate = d.d;
+  }
+  return issues;
+}
+
+function renderIntegrityCheck() {
+  var el = document.getElementById('integrity-result');
+  if (!el) return;
+  var issues = checkDataIntegrity();
+  if (issues.length === 0) {
+    el.innerHTML = '<p style="color:#4CAF50;">✅ データ異常なし（' + getAllData().length + '件チェック完了）</p>';
+    return;
+  }
+  var html = '<p style="color:#f44336;">⚠️ ' + issues.length + '件の異常を検出:</p><div style="max-height:200px;overflow-y:auto;">';
+  for (var i = 0; i < issues.length; i++) {
+    var iss = issues[i];
+    html += '<div style="padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
+      '<strong>第' + iss.round + '回</strong> [' + iss.type + '] ' + iss.msg + '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+// --- Item 2: Dynamic Stats Engine ---
+function isWeekly2Era(dateStr) {
+  return dateStr >= '2011-04-01';
+}
+
+function calcBonusPlusMinus1Rate(draws) {
+  if (draws.length < 2) return { rate: 0, ratio: 1.0 };
+  var hit = 0, total = 0;
+  for (var i = 1; i < draws.length; i++) {
+    var prevB = draws[i - 1].b;
+    if (!prevB) continue;
+    total++;
+    var curr = draws[i].n;
+    for (var j = 0; j < curr.length; j++) {
+      if (Math.abs(curr[j] - prevB) <= 1) { hit++; break; }
+    }
+  }
+  var rate = total > 0 ? hit / total : 0;
+  var expected = 1 - Math.pow(37 / 43, 6) * Math.pow(38 / 43, 6);
+  var approxExpected = 0.25;
+  return { rate: rate, ratio: approxExpected > 0 ? rate / approxExpected : 1.0, hit: hit, total: total };
+}
+
+function calcConsecutiveNumRate(draws, len) {
+  var hit = 0;
+  for (var i = 0; i < draws.length; i++) {
+    var sorted = draws[i].n.slice().sort(function(a, b) { return a - b; });
+    var run = 1, found = false;
+    for (var j = 1; j < sorted.length; j++) {
+      if (sorted[j] === sorted[j - 1] + 1) { run++; if (run >= len) { found = true; break; } }
+      else run = 1;
+    }
+    if (found) hit++;
+  }
+  return { rate: hit / draws.length, hit: hit, total: draws.length };
+}
+
+function calcCarryoverRate(draws) {
+  if (draws.length < 2) return { avgCarry: 0, ratio: 1.0 };
+  var totalCarry = 0, count = 0;
+  for (var i = 1; i < draws.length; i++) {
+    var prev = new Set(draws[i - 1].n);
+    var carry = 0;
+    for (var j = 0; j < draws[i].n.length; j++) {
+      if (prev.has(draws[i].n[j])) carry++;
+    }
+    totalCarry += carry;
+    count++;
+  }
+  var avgCarry = count > 0 ? totalCarry / count : 0;
+  var expected = 6 * 6 / 43;
+  return { avgCarry: avgCarry, ratio: expected > 0 ? avgCarry / expected : 1.0, total: count };
+}
+
+function calcSlideRate(draws) {
+  if (draws.length < 2) return { rate: 0, ratio: 1.0 };
+  var hit = 0, total = 0;
+  for (var i = 1; i < draws.length; i++) {
+    total++;
+    var prevNums = draws[i - 1].n;
+    var currSet = new Set(draws[i].n);
+    var found = false;
+    for (var j = 0; j < prevNums.length; j++) {
+      if (currSet.has(prevNums[j] - 1) || currSet.has(prevNums[j] + 1)) { found = true; break; }
+    }
+    if (found) hit++;
+  }
+  var rate = total > 0 ? hit / total : 0;
+  return { rate: rate, ratio: rate / 0.85, hit: hit, total: total };
+}
+
+function calcHotColdRate(draws) {
+  if (draws.length < 51) return { hotHitRate: 0, coldHitRate: 0 };
+  var hit50hot = 0, hit50cold = 0, tests = 0;
+  for (var i = 50; i < draws.length; i++) {
+    var subset = draws.slice(i - 50, i);
+    var freq = {};
+    for (var s = 0; s < subset.length; s++) {
+      for (var j = 0; j < subset[s].n.length; j++) {
+        freq[subset[s].n[j]] = (freq[subset[s].n[j]] || 0) + 1;
+      }
+    }
+    var sorted = [];
+    for (var k in freq) sorted.push([parseInt(k), freq[k]]);
+    sorted.sort(function(a, b) { return b[1] - a[1]; });
+    var hotSet = new Set(sorted.slice(0, 10).map(function(e) { return e[0]; }));
+    var coldSet = new Set(sorted.slice(-10).map(function(e) { return e[0]; }));
+    var actual = new Set(draws[i].n);
+    tests++;
+    var hh = 0, ch = 0;
+    actual.forEach(function(n) { if (hotSet.has(n)) hh++; if (coldSet.has(n)) ch++; });
+    hit50hot += hh;
+    hit50cold += ch;
+  }
+  var expectedPerNum = 6 / 43;
+  return {
+    hotHitRate: tests > 0 ? hit50hot / (tests * 6) : 0,
+    coldHitRate: tests > 0 ? hit50cold / (tests * 6) : 0,
+    hotRatio: tests > 0 ? (hit50hot / (tests * 10)) / expectedPerNum : 1.0,
+    coldRatio: tests > 0 ? (hit50cold / (tests * 10)) / expectedPerNum : 1.0,
+    tests: tests
+  };
+}
+
+function calcBonusBackRate(draws, back) {
+  if (draws.length < back + 1) return { rate: 0, ratio: 1.0 };
+  var hit = 0, total = 0;
+  for (var i = back; i < draws.length; i++) {
+    var prevB = draws[i - back].b;
+    if (!prevB) continue;
+    total++;
+    var currSet = new Set(draws[i].n);
+    if (currSet.has(prevB)) hit++;
+  }
+  var rate = total > 0 ? hit / total : 0;
+  var expected = 6 / 43;
+  return { rate: rate, ratio: expected > 0 ? rate / expected : 1.0, hit: hit, total: total };
+}
+
+function calcSumDistribution(draws) {
+  var sums = [];
+  for (var i = 0; i < draws.length; i++) {
+    sums.push(draws[i].n.reduce(function(a, b) { return a + b; }, 0));
+  }
+  sums.sort(function(a, b) { return a - b; });
+  var mean = sums.reduce(function(a, b) { return a + b; }, 0) / sums.length;
+  var variance = sums.reduce(function(a, s) { return a + (s - mean) * (s - mean); }, 0) / sums.length;
+  var std = Math.sqrt(variance);
+  var p5 = sums[Math.floor(sums.length * 0.05)];
+  var p95 = sums[Math.floor(sums.length * 0.95)];
+  var p1 = sums[Math.floor(sums.length * 0.01)];
+  var p99 = sums[Math.floor(sums.length * 0.99)];
+  return { mean: mean, std: std, p5: p5, p95: p95, p1: p1, p99: p99, sums: sums };
+}
+
+function recalculateAllStats(draws) {
+  if (!draws) draws = getAllData();
+  return {
+    bonusPM1: calcBonusPlusMinus1Rate(draws),
+    consec2: calcConsecutiveNumRate(draws, 2),
+    consec3: calcConsecutiveNumRate(draws, 3),
+    carryover: calcCarryoverRate(draws),
+    slide: calcSlideRate(draws),
+    hotCold: calcHotColdRate(draws),
+    bonus2Back: calcBonusBackRate(draws, 2),
+    bonus3Back: calcBonusBackRate(draws, 3),
+    sumDist: calcSumDistribution(draws),
+    totalDraws: draws.length,
+    lastUpdated: new Date().toISOString()
+  };
+}
+
+// --- Item 3: Era-based Analysis ---
+function calcStatsByEra() {
+  var all = getAllData();
+  var era1 = all.filter(function(d) { return !isWeekly2Era(d.d); });
+  var era2 = all.filter(function(d) { return isWeekly2Era(d.d); });
+  return {
+    full: recalculateAllStats(all),
+    era1: recalculateAllStats(era1),
+    era2: recalculateAllStats(era2),
+    era1Count: era1.length,
+    era2Count: era2.length
+  };
+}
+
+// --- Item 4: Markov Chain Decomposition ---
+function decomposeMarkov() {
+  var data = getAllData();
+  if (data.length < 10) return null;
+
+  // Pure Markov transition: does number N appearing predict specific numbers next draw?
+  var transHit = 0, transTotal = 0;
+  for (var i = 1; i < data.length; i++) {
+    var prev = data[i - 1].n;
+    var curr = new Set(data[i].n);
+    // For each prev number, check if the most common successor appears
+    transTotal += 6;
+    for (var j = 0; j < prev.length; j++) {
+      // Find successor frequency from historical data
+      var succFreq = {};
+      for (var k = 1; k < i; k++) {
+        if (data[k - 1].n.indexOf(prev[j]) >= 0) {
+          for (var m = 0; m < data[k].n.length; m++) {
+            succFreq[data[k].n[m]] = (succFreq[data[k].n[m]] || 0) + 1;
+          }
+        }
+      }
+      var bestSucc = null, bestCount = 0;
+      for (var sk in succFreq) {
+        if (succFreq[sk] > bestCount) { bestCount = succFreq[sk]; bestSucc = parseInt(sk); }
+      }
+      if (bestSucc && curr.has(bestSucc)) transHit++;
+    }
+  }
+  var pureMarkovRate = transTotal > 0 ? transHit / transTotal : 0;
+  var expectedRate = 6 / 43;
+
+  // Slide effect: prev ±1
+  var slideHits = 0, slideChecks = 0;
+  for (var i2 = 1; i2 < data.length; i2++) {
+    var prevN = data[i2 - 1].n;
+    var currS = new Set(data[i2].n);
+    for (var j2 = 0; j2 < prevN.length; j2++) {
+      slideChecks++;
+      if (currS.has(prevN[j2] - 1) || currS.has(prevN[j2] + 1)) slideHits++;
+    }
+  }
+  var slideRate = slideChecks > 0 ? slideHits / slideChecks : 0;
+  var slideExpected = 1 - Math.pow((43 - 2) / 43, 6);
+
+  // Bonus slide effect: prev bonus ±1
+  var bonusSlideHits = 0, bonusSlideChecks = 0;
+  for (var i3 = 1; i3 < data.length; i3++) {
+    var pb = data[i3 - 1].b;
+    if (!pb) continue;
+    bonusSlideChecks++;
+    var cs = new Set(data[i3].n);
+    if (cs.has(pb - 1) || cs.has(pb + 1) || cs.has(pb)) bonusSlideHits++;
+  }
+  var bonusSlideRate = bonusSlideChecks > 0 ? bonusSlideHits / bonusSlideChecks : 0;
+
+  // Carryover (repeat) effect
+  var carryHits = 0, carryChecks = 0;
+  for (var i4 = 1; i4 < data.length; i4++) {
+    var prevSet = new Set(data[i4 - 1].n);
+    for (var j4 = 0; j4 < data[i4].n.length; j4++) {
+      carryChecks++;
+      if (prevSet.has(data[i4].n[j4])) carryHits++;
+    }
+  }
+  var carryRate = carryChecks > 0 ? carryHits / carryChecks : 0;
+  var carryExpected = 6 / 43;
+
+  return {
+    pureMarkov: { rate: pureMarkovRate, ratio: pureMarkovRate / expectedRate, label: '純マルコフ遷移' },
+    slide: { rate: slideRate, ratio: slideRate / slideExpected, label: '±1スライド' },
+    bonusSlide: { rate: bonusSlideRate, ratio: bonusSlideRate / 0.35, label: 'ボーナス±1' },
+    carryover: { rate: carryRate, ratio: carryRate / carryExpected, label: 'キャリーオーバー' }
+  };
+}
+
+// --- Item 5: Sum Value Filter ---
+var _sumFilterRange = null;
+function updateSumFilter() {
+  var data = getAllData();
+  var stats = calcSumDistribution(data);
+  _sumFilterRange = { p5: stats.p5, p95: stats.p95, mean: stats.mean, std: stats.std };
+  return _sumFilterRange;
+}
+
+// --- Dynamic Stats Rendering ---
+function formatRatio(ratio) {
+  var r = ratio.toFixed(3);
+  var color = ratio >= 1.05 ? '#4CAF50' : (ratio >= 0.95 ? '#FF9800' : '#f44336');
+  return '<span style="color:' + color + ';font-weight:bold;">' + r + 'x</span>';
+}
+
+function renderDynamicStats(eraKey) {
+  var el = document.getElementById('dynamicStatsContent');
+  if (!el) return;
+
+  var eraData = calcStatsByEra();
+  var stats = eraData[eraKey || 'full'];
+  if (!stats) { el.innerHTML = '<p>統計計算エラー</p>'; return; }
+
+  var rows = [
+    { label: 'ボーナス±1→本数字', val: stats.bonusPM1 },
+    { label: '2連番出現率', val: stats.consec2 },
+    { label: '3連番出現率', val: stats.consec3 },
+    { label: 'キャリーオーバー', val: stats.carryover, isCarry: true },
+    { label: '±1スライド出現', val: stats.slide },
+    { label: 'ボーナス2回前→本数字', val: stats.bonus2Back },
+    { label: 'ボーナス3回前→本数字', val: stats.bonus3Back },
+  ];
+
+  var html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+    '<tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:4px;">パラメータ</th>' +
+    '<th style="text-align:right;padding:4px;">実測値</th><th style="text-align:right;padding:4px;">倍率</th></tr>';
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var val = row.isCarry ? row.val.avgCarry.toFixed(3) : (row.val.rate * 100).toFixed(2) + '%';
+    var ratio = row.isCarry ? row.val.ratio : row.val.ratio;
+    html += '<tr style="border-bottom:1px solid var(--border);">' +
+      '<td style="padding:4px;">' + row.label + '</td>' +
+      '<td style="text-align:right;padding:4px;">' + val + '</td>' +
+      '<td style="text-align:right;padding:4px;">' + formatRatio(ratio) + '</td></tr>';
+  }
+
+  // Hot/Cold
+  html += '<tr style="border-bottom:1px solid var(--border);">' +
+    '<td style="padding:4px;">ホット数字的中率</td>' +
+    '<td style="text-align:right;padding:4px;">' + (stats.hotCold.hotHitRate * 100).toFixed(2) + '%</td>' +
+    '<td style="text-align:right;padding:4px;">' + formatRatio(stats.hotCold.hotRatio || 1.0) + '</td></tr>';
+  html += '<tr style="border-bottom:1px solid var(--border);">' +
+    '<td style="padding:4px;">コールド数字的中率</td>' +
+    '<td style="text-align:right;padding:4px;">' + (stats.hotCold.coldHitRate * 100).toFixed(2) + '%</td>' +
+    '<td style="text-align:right;padding:4px;">' + formatRatio(stats.hotCold.coldRatio || 1.0) + '</td></tr>';
+
+  html += '</table>';
+
+  // Sum distribution
+  html += '<div style="margin-top:12px;padding:8px;background:var(--card-bg);border:1px solid var(--border);border-radius:4px;">' +
+    '<p><strong>合計値分布</strong></p>' +
+    '<p style="font-size:12px;">平均: ' + stats.sumDist.mean.toFixed(1) + ' / 標準偏差: ' + stats.sumDist.std.toFixed(1) + '</p>' +
+    '<p style="font-size:12px;">95%信頼区間: [' + stats.sumDist.p5 + ', ' + stats.sumDist.p95 + ']</p>' +
+    '<p style="font-size:12px;">99%信頼区間: [' + stats.sumDist.p1 + ', ' + stats.sumDist.p99 + ']</p>' +
+    '</div>';
+
+  // Era comparison
+  html += '<div style="margin-top:12px;padding:8px;background:var(--card-bg);border:1px solid var(--border);border-radius:4px;">' +
+    '<p><strong>📅 時代別データ件数</strong></p>' +
+    '<p style="font-size:12px;">全期間: ' + eraData.full.totalDraws + '回 / 週1回時代(〜2011/3): ' + eraData.era1Count + '回 / 週2回時代(2011/4〜): ' + eraData.era2Count + '回</p>';
+
+  // Highlight significant differences
+  var era1s = eraData.era1;
+  var era2s = eraData.era2;
+  var diffs = [];
+  var paramNames = [
+    { key: 'bonusPM1', label: 'ボーナス±1' },
+    { key: 'consec2', label: '2連番' },
+    { key: 'slide', label: 'スライド' },
+    { key: 'carryover', label: 'キャリーオーバー' }
+  ];
+  for (var d = 0; d < paramNames.length; d++) {
+    var pn = paramNames[d];
+    var r1 = era1s[pn.key].ratio;
+    var r2 = era2s[pn.key].ratio;
+    var diff = Math.abs(r1 - r2);
+    if (diff >= 0.05) {
+      diffs.push(pn.label + ': 週1=' + r1.toFixed(3) + 'x / 週2=' + r2.toFixed(3) + 'x (差' + diff.toFixed(3) + ')');
+    }
+  }
+  if (diffs.length > 0) {
+    html += '<p style="font-size:12px;color:#f44336;margin-top:4px;">⚠️ 有意な差(0.05以上):</p>';
+    for (var di = 0; di < diffs.length; di++) {
+      html += '<p style="font-size:11px;margin-left:8px;">• ' + diffs[di] + '</p>';
+    }
+  } else {
+    html += '<p style="font-size:12px;color:#4CAF50;margin-top:4px;">✅ 時代間で有意な差なし</p>';
+  }
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+// --- Markov Decomposition Rendering ---
+function renderMarkovDecomp() {
+  var el = document.getElementById('markovDecompContent');
+  if (!el) return;
+
+  var result = decomposeMarkov();
+  if (!result) { el.innerHTML = '<p style="color:var(--muted);">データ不足</p>'; return; }
+
+  var components = [result.pureMarkov, result.slide, result.bonusSlide, result.carryover];
+  var html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">' +
+    '<tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:4px;">構成要素</th>' +
+    '<th style="text-align:right;padding:4px;">実測率</th><th style="text-align:right;padding:4px;">倍率</th><th style="text-align:right;padding:4px;">判定</th></tr>';
+
+  for (var i = 0; i < components.length; i++) {
+    var c = components[i];
+    var judge = c.ratio >= 1.05 ? '<span style="color:#4CAF50;">✅ 有効</span>' :
+               (c.ratio >= 0.95 ? '<span style="color:#FF9800;">— ノイズ</span>' :
+               '<span style="color:#f44336;">❌ 無効</span>');
+    html += '<tr style="border-bottom:1px solid var(--border);">' +
+      '<td style="padding:4px;">' + c.label + '</td>' +
+      '<td style="text-align:right;padding:4px;">' + (c.rate * 100).toFixed(2) + '%</td>' +
+      '<td style="text-align:right;padding:4px;">' + formatRatio(c.ratio) + '</td>' +
+      '<td style="text-align:right;padding:4px;">' + judge + '</td></tr>';
+  }
+  html += '</table>';
+  html += '<p style="font-size:11px;color:var(--muted);margin-top:8px;">※ 倍率1.05x以上で有効、0.95-1.05はノイズレベル、0.95未満は無効</p>';
+
+  el.innerHTML = html;
+}
+
+// --- Integrity Warning Banner ---
+function showIntegrityWarning() {
+  var issues = checkDataIntegrity();
+  var banner = document.getElementById('integrityBanner');
+  if (!banner) return;
+  if (issues.length > 0) {
+    banner.style.display = 'block';
+    banner.innerHTML = '⚠️ データ異常 ' + issues.length + '件検出（設定タブで詳細確認）';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+// ============================================================
+// [v8.6] Experimental Mode: unique patterns + win highlighting
 // ============================================================
 function keyOf(numbers) {
   return numbers.slice().sort(function(a,b){return a-b;}).join(',');
@@ -4073,7 +4572,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.5.4' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.6' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -4216,7 +4715,7 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.5.4') {
+  if (saved && saved.results && saved.version === 'v8.6') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
@@ -4227,7 +4726,7 @@ function renderExperimental() {
       return;
     }
   }
-  if (saved && saved.version !== 'v8.5.4') {
+  if (saved && saved.version !== 'v8.6') {
     LS.remove('exp_' + dateStr);
   }
 
