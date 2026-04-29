@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.6
+  Loto6 AI Predictor v8.6.1
   Created: 2026-03-16 / Updated: 2026-03-28
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
@@ -638,14 +638,13 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.6</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.6.1</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.6) — 統計的基盤の動的化と最新データ対応:<br>
-      • データ整合性チェック機能（起動時自動+設定タブから手動実行）<br>
-      • 全パラメータ倍率の動的再計算（データ追加時自動更新）<br>
-      • 週1回/週2回時代の統計比較（有意差ハイライト）<br>
-      • マルコフ連鎖の分解検証（各構成要素の有効性判定）<br>
-      • 合計値95%信頼区間フィルタ（極端パターン除外）
+      搭載アルゴリズム (v8.6.1) — ボーナス±1過剰評価バグ修正:<br>
+      • ボーナス→本数字の加点を全廃（0.98x=統計的に無効と確認済）<br>
+      • ボーナス±1の加点を+1→+0.5に半減（真の1.04xに適正化）<br>
+      • 50パターン全体で1数字あたり最大15回の出現上限を導入<br>
+      • v8.6: 動的統計/データ整合性/週2回検証/マルコフ分解/合計値フィルタ
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -1864,9 +1863,9 @@ function applyCommonScoring(i, score, excl, data, recent3, isAttack) {
       && !(data.length >= 2 && data[data.length-2].n.includes(i))) score += 0.5;
   // [v8-B7] Long-term cold regression: 14.07% → +0.5
   if (iv && iv.since >= iv.avg * 1.2 && iv.since <= iv.avg * 1.8) score += 0.5;
-  // [v8-B5] Bonus ±1 → main: 14.43% (唯一理論超)
+  // [v8.6.1] Bonus ±1 → main: 1.04x, capped weight (was +1, now +0.5)
   const lastBonus = data[data.length - 1].b;
-  if (Math.abs(i - lastBonus) === 1) score += 1;
+  if (Math.abs(i - lastBonus) === 1) score += 0.5;
   return score;
 }
 
@@ -2058,8 +2057,7 @@ function predictPattern3(data, rng, targetDay) {
     const poissonScore = Math.abs(observed - lambda) < 0.02 ? 3 : observed > lambda ? 2 : 1;
     let score = markovScore * 5 + poissonScore;
     if (lastDraw.includes(n) && rng() < excl.expectedCarry / 6) score += 5;
-    // [B11] Bonus→main reduced
-    if (n === excl.lastDraw.b && rng() < excl.bonusAppearRate) score += 1.5;
+    // [v8.6.1] Bonus→main removed (0.98x = invalid)
     if (excl.isLowCarryPeriod && lastDraw.includes(n)) score *= 0.7;
     // [B4] Transition bonus strengthened
     if (transitionCandidates.has(n)) score += 5;
@@ -2117,7 +2115,7 @@ function predictPattern4(data, rng, targetDay) {
     const iv = intervals[n];
     const isMiddle = !excl.coolingNums.has(n) && iv.since >= iv.avg * 0.3 && iv.since <= iv.avg * 1.3 && freq50[n] >= 4 && freq50[n] <= 9;
     if (isMiddle) score += 2;
-    for (let r = 0; r < recent3.length; r++) { if (n === recent3[recent3.length-1-r].b) score += (3-r); }
+    // [v8.6.1] Removed bonus→main scoring (0.98x = statistically invalid)
     score += rng() * 1.0;
     scores.push({ n, score });
   }
@@ -2159,7 +2157,7 @@ function predictPattern5(data, rng, weights, targetDay) {
     const iv = intervals[n];
     const isMiddle = !excl.coolingNums.has(n) && iv.since >= iv.avg * 0.3 && iv.since <= iv.avg * 1.3 && freq50[n] >= 4 && freq50[n] <= 9;
     if (isMiddle) score += 2;
-    for (let r = 0; r < recent3.length; r++) { if (n === recent3[recent3.length-1-r].b) score += (3-r); }
+    // [v8.6.1] Removed bonus→main scoring (0.98x = statistically invalid)
     score += rng() * 1.0;
     combined.push({ n, score });
   }
@@ -4487,6 +4485,20 @@ async function generate50Patterns() {
     ];
 
     var results = {};
+    var globalNumCounts = {};
+    var MAX_PER_NUMBER = 15;
+
+    function exceedsNumCap(nums) {
+      for (var c = 0; c < nums.length; c++) {
+        if ((globalNumCounts[nums[c]] || 0) >= MAX_PER_NUMBER) return true;
+      }
+      return false;
+    }
+    function updateNumCounts(nums) {
+      for (var c = 0; c < nums.length; c++) {
+        globalNumCounts[nums[c]] = (globalNumCounts[nums[c]] || 0) + 1;
+      }
+    }
 
     for (var si = 0; si < strategyFns.length; si++) {
       var strat = strategyFns[si];
@@ -4499,6 +4511,7 @@ async function generate50Patterns() {
         var mp = mainPred.predictions[si];
         if (mp.numbers && mp.numbers.length === 6) {
           results[strat.key].push({ numbers: mp.numbers.slice(), bonus: mp.bonus, isMain: true });
+          updateNumCounts(mp.numbers);
         }
       }
 
@@ -4513,7 +4526,7 @@ async function generate50Patterns() {
             for (var w = 0; w < 10 + attempt; w++) rng();
             var r = strat.fn(data, rng);
             if (r && r.numbers && r.numbers.length === 6) {
-              if (!isTooSimilar(r.numbers, results[strat.key], 5)) {
+              if (!isTooSimilar(r.numbers, results[strat.key], 5) && !exceedsNumCap(r.numbers)) {
                 result = r;
               }
             }
@@ -4528,7 +4541,7 @@ async function generate50Patterns() {
               for (var w2 = 0; w2 < 20 + attempt2 * 3; w2++) rng2();
               var r2 = strat.fn(data, rng2);
               if (r2 && r2.numbers && r2.numbers.length === 6) {
-                if (!isExactDuplicate(r2.numbers, results[strat.key])) {
+                if (!isExactDuplicate(r2.numbers, results[strat.key]) && !exceedsNumCap(r2.numbers)) {
                   result = r2;
                 }
               }
@@ -4549,7 +4562,7 @@ async function generate50Patterns() {
                 nums[idx] = newNum;
               }
               nums.sort(function(a,b){return a-b;});
-              if (!isExactDuplicate(nums, results[strat.key])) {
+              if (!isExactDuplicate(nums, results[strat.key]) && !exceedsNumCap(nums)) {
                 result = { numbers: nums, bonus: lastPat.bonus };
               }
             }
@@ -4558,6 +4571,7 @@ async function generate50Patterns() {
 
         if (result) {
           results[strat.key].push(result);
+          updateNumCounts(result.numbers);
         } else {
           console.error(strat.key + ' pattern ' + pi + ' could not be generated');
           break;
@@ -4572,7 +4586,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.6' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.6.1' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -4715,7 +4729,7 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.6') {
+  if (saved && saved.results && saved.version === 'v8.6.1') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
@@ -4726,7 +4740,7 @@ function renderExperimental() {
       return;
     }
   }
-  if (saved && saved.version !== 'v8.6') {
+  if (saved && saved.version !== 'v8.6.1') {
     LS.remove('exp_' + dateStr);
   }
 
