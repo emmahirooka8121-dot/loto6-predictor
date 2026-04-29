@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.6.1
-  Created: 2026-03-16 / Updated: 2026-03-28
+  Loto6 AI Predictor v8.7
+  Created: 2026-03-16 / Updated: 2026-04-29
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
   Single HTML file, no server required.
@@ -638,12 +638,13 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.6.1</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.7</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.6.1) — ボーナス±1過剰評価バグ修正:<br>
-      • ボーナス→本数字の加点を全廃（0.98x=統計的に無効と確認済）<br>
-      • ボーナス±1の加点を+1→+0.5に半減（真の1.04xに適正化）<br>
-      • 50パターン全体で1数字あたり最大15回の出現上限を導入<br>
+      搭載アルゴリズム (v8.7) — コアプール拡張:<br>
+      • 安定型A/Bのコア選択をTop3固定→Top6プール+C(6,3)組合せに拡張<br>
+      • 10パターンに10種類の異なるコアセットを割当（1数字の最大出現=6回）<br>
+      • スコア+多様性の複合ランキングでコアセット選択<br>
+      • v8.6.1: ボーナス±1過剰評価修正/50パターン出現上限<br>
       • v8.6: 動的統計/データ整合性/週2回検証/マルコフ分解/合計値フィルタ
     </p>
     <p class="disclaimer">
@@ -2272,10 +2273,132 @@ function selectCoreNumbers(data, type) {
 }
 
 // ============================================================
+// [v8.7] Core Pool Expansion for Stable Patterns
+// ============================================================
+function buildCorePool(data, type) {
+  var lastDraw = data[data.length - 1];
+  var prev2Draw = data.length >= 2 ? data[data.length - 2] : null;
+  var recent6 = data.slice(-6);
+  var freq6 = new Array(44).fill(0);
+  for (var di = 0; di < recent6.length; di++) {
+    for (var ni = 0; ni < recent6[di].n.length; ni++) freq6[recent6[di].n[ni]]++;
+  }
+  var freq50 = calcFrequency(data, 50);
+  var intervals = calcIntervals(data);
+  var candidates = [];
+  var seen = {};
+
+  for (var n = 1; n <= 43; n++) {
+    var score = 0;
+    var inLast = lastDraw.n.indexOf(n) >= 0;
+    var inPrev2 = prev2Draw && prev2Draw.n.indexOf(n) >= 0;
+
+    if (type === 'A') {
+      if (inLast && inPrev2) score += 2;
+      else if (inLast) score += 1.5;
+      if (freq6[n] >= 3) {
+        var consecutive = 0;
+        for (var k = data.length - 1; k >= Math.max(0, data.length - 6); k--) {
+          if (data[k].n.indexOf(n) >= 0) consecutive++; else break;
+        }
+        if (consecutive >= 2) score += 1;
+      }
+      var isSlide = false;
+      for (var si = 0; si < lastDraw.n.length; si++) {
+        if (Math.abs(lastDraw.n[si] - n) === 1 && !inLast) { isSlide = true; break; }
+      }
+      if (isSlide) score += 0.5;
+    } else {
+      var isSlideB = false;
+      for (var sj = 0; sj < lastDraw.n.length; sj++) {
+        if (Math.abs(lastDraw.n[sj] - n) === 1 && !inLast) { isSlideB = true; break; }
+      }
+      if (isSlideB) score += 2;
+      var isSlide2 = false;
+      if (prev2Draw) {
+        for (var sk = 0; sk < prev2Draw.n.length; sk++) {
+          if (Math.abs(prev2Draw.n[sk] - n) === 1 && !inLast && prev2Draw.n.indexOf(n) < 0) { isSlide2 = true; break; }
+        }
+      }
+      if (isSlide2) score += 1;
+      if (inLast) score += 1;
+      if (freq6[n] >= 3) score += 0.5;
+    }
+
+    var iv = intervals[n];
+    if (iv && iv.since >= iv.avg * 0.5 && iv.since <= iv.avg * 1.5) score += 0.5;
+    if (freq50[n] >= 6) score += 0.3;
+
+    if (score > 0) candidates.push({ n: n, score: score });
+  }
+
+  candidates.sort(function(a, b) { return b.score - a.score; });
+  var pool = [];
+  for (var ci = 0; ci < candidates.length && pool.length < 6; ci++) {
+    if (!seen[candidates[ci].n]) {
+      seen[candidates[ci].n] = true;
+      pool.push(candidates[ci]);
+    }
+  }
+  if (pool.length < 6) {
+    for (var fn = 1; fn <= 43 && pool.length < 6; fn++) {
+      if (!seen[fn] && freq50[fn] >= 5) {
+        pool.push({ n: fn, score: 0.1 });
+        seen[fn] = true;
+      }
+    }
+  }
+  return pool;
+}
+
+function selectCoreSets(pool, count) {
+  if (!count) count = 10;
+  var nums = [];
+  for (var i = 0; i < pool.length; i++) nums.push(pool[i]);
+  var combos = [];
+  for (var a = 0; a < nums.length; a++) {
+    for (var b = a + 1; b < nums.length; b++) {
+      for (var c = b + 1; c < nums.length; c++) {
+        var trio = [nums[a], nums[b], nums[c]];
+        var totalScore = trio[0].score + trio[1].score + trio[2].score;
+        var ns = [trio[0].n, trio[1].n, trio[2].n].sort(function(x,y){return x-y;});
+        var spread = ns[2] - ns[0];
+        var diversity = spread / 42;
+        combos.push({ cores: ns, totalScore: totalScore, diversity: diversity });
+      }
+    }
+  }
+  combos.sort(function(a, b) {
+    return (b.totalScore + b.diversity * 3) - (a.totalScore + a.diversity * 3);
+  });
+
+  var result = [];
+  var numUsage = {};
+  var MAX_CORE_USAGE = 6;
+  for (var ci = 0; ci < combos.length && result.length < count; ci++) {
+    var combo = combos[ci];
+    var ok = true;
+    for (var ni = 0; ni < combo.cores.length; ni++) {
+      if ((numUsage[combo.cores[ni]] || 0) >= MAX_CORE_USAGE) { ok = false; break; }
+    }
+    if (ok) {
+      result.push(combo.cores);
+      for (var ni2 = 0; ni2 < combo.cores.length; ni2++) {
+        numUsage[combo.cores[ni2]] = (numUsage[combo.cores[ni2]] || 0) + 1;
+      }
+    }
+  }
+  while (result.length < count && combos.length > 0) {
+    result.push(combos[result.length % combos.length].cores);
+  }
+  return result;
+}
+
+// ============================================================
 // [v6-S3] Stable Pattern A (carryover-focused)
 // ============================================================
-function predictStableA(data, rng, targetDay) {
-  const cores = selectCoreNumbers(data, 'A');
+function predictStableA(data, rng, targetDay, coreSet) {
+  const cores = coreSet || selectCoreNumbers(data, 'A');
   const excl = calcExclusions(data);
   const intervals = calcIntervals(data);
   const freq50 = calcFrequency(data, 50);
@@ -2305,20 +2428,24 @@ function predictStableA(data, rng, targetDay) {
 // ============================================================
 // [v6-S3b] Stable Pattern B (slide-focused)
 // ============================================================
-function predictStableB(data, rng, targetDay) {
-  const coresA = selectCoreNumbers(data, 'A');
-  const coresB_raw = selectCoreNumbers(data, 'B');
-  // P4と2個共有、1個異なるように調整
-  const shared = coresA.slice(0, 2);
-  let unique = coresB_raw.find(n => !shared.includes(n));
-  if (!unique) {
-    const _freq50 = calcFrequency(data, 50);
-    for (let _n = 1; _n <= 43; _n++) {
-      if (!shared.includes(_n) && !coresA.includes(_n) && _freq50[_n] >= 5) { unique = _n; break; }
+function predictStableB(data, rng, targetDay, coreSet) {
+  let cores;
+  if (coreSet) {
+    cores = coreSet;
+  } else {
+    const coresA = selectCoreNumbers(data, 'A');
+    const coresB_raw = selectCoreNumbers(data, 'B');
+    const shared = coresA.slice(0, 2);
+    let unique = coresB_raw.find(n => !shared.includes(n));
+    if (!unique) {
+      const _freq50 = calcFrequency(data, 50);
+      for (let _n = 1; _n <= 43; _n++) {
+        if (!shared.includes(_n) && !coresA.includes(_n) && _freq50[_n] >= 5) { unique = _n; break; }
+      }
     }
+    if (!unique) unique = coresB_raw[0];
+    cores = [...shared, unique];
   }
-  if (!unique) unique = coresB_raw[0];
-  const cores = [...shared, unique];
   const excl = calcExclusions(data);
   const intervals = calcIntervals(data);
   const freq50 = calcFrequency(data, 50);
@@ -4468,6 +4595,11 @@ async function generate50Patterns() {
     var targetDay = targetDate.getDay();
     var weights = LS.get('ensembleWeights') || [1,1,1,1];
 
+    var corePoolA = buildCorePool(data, 'A');
+    var coreSetsA = selectCoreSets(corePoolA, 10);
+    var corePoolB = buildCorePool(data, 'B');
+    var coreSetsB = selectCoreSets(corePoolB, 10);
+
     if (statusEl) statusEl.textContent = '🔄 生成中... (1/5 ホット頻度)';
     if (resultsEl) resultsEl.style.display = 'none';
     await new Promise(function(r){setTimeout(r,50);});
@@ -4480,8 +4612,8 @@ async function generate50Patterns() {
       { key: 'hot', fn: function(d,r) { return predictPattern1(d,r,targetDay); } },
       { key: 'markov', fn: function(d,r) { return predictPattern3(d,r,targetDay); } },
       { key: 'ensemble', fn: function(d,r) { return predictPattern5(d,r,weights,targetDay); } },
-      { key: 'stableA', fn: function(d,r) { return predictStableA(d,r,targetDay); } },
-      { key: 'stableB', fn: function(d,r) { return predictStableB(d,r,targetDay); } },
+      { key: 'stableA', fn: function(d,r,cs) { return predictStableA(d,r,targetDay,cs); } },
+      { key: 'stableB', fn: function(d,r,cs) { return predictStableB(d,r,targetDay,cs); } },
     ];
 
     var results = {};
@@ -4518,13 +4650,16 @@ async function generate50Patterns() {
       while (results[strat.key].length < 10) {
         var pi = results[strat.key].length;
         var result = null;
+        var coreSet = null;
+        if (strat.key === 'stableA' && coreSetsA[pi]) coreSet = coreSetsA[pi];
+        else if (strat.key === 'stableB' && coreSetsB[pi]) coreSet = coreSetsB[pi];
 
         for (var attempt = 0; attempt < 200 && !result; attempt++) {
           try {
             var seed = dateStr + '_exp_' + strat.key + '_p' + pi + '_a' + attempt;
             var rng = seededRandom(seed);
             for (var w = 0; w < 10 + attempt; w++) rng();
-            var r = strat.fn(data, rng);
+            var r = strat.fn(data, rng, coreSet);
             if (r && r.numbers && r.numbers.length === 6) {
               if (!isTooSimilar(r.numbers, results[strat.key], 5) && !exceedsNumCap(r.numbers)) {
                 result = r;
@@ -4539,7 +4674,7 @@ async function generate50Patterns() {
               var seed2 = dateStr + '_relax6_' + strat.key + '_p' + pi + '_a' + attempt2;
               var rng2 = seededRandom(seed2);
               for (var w2 = 0; w2 < 20 + attempt2 * 3; w2++) rng2();
-              var r2 = strat.fn(data, rng2);
+              var r2 = strat.fn(data, rng2, coreSet);
               if (r2 && r2.numbers && r2.numbers.length === 6) {
                 if (!isExactDuplicate(r2.numbers, results[strat.key]) && !exceedsNumCap(r2.numbers)) {
                   result = r2;
@@ -4586,7 +4721,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.6.1' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.7' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -4729,7 +4864,7 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.6.1') {
+  if (saved && saved.results && saved.version === 'v8.7') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
@@ -4740,7 +4875,7 @@ function renderExperimental() {
       return;
     }
   }
-  if (saved && saved.version !== 'v8.6.1') {
+  if (saved && saved.version !== 'v8.7') {
     LS.remove('exp_' + dateStr);
   }
 
