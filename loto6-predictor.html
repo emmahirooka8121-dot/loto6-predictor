@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.7
-  Created: 2026-03-16 / Updated: 2026-04-29
+  Loto6 AI Predictor v8.8
+  Created: 2026-03-16 / Updated: 2026-05-03
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
   Single HTML file, no server required.
@@ -514,6 +514,19 @@ body {
   </div>
 
   <div class="card">
+    <div class="card-title">📈 動的倍率の推移</div>
+    <div id="trendAlerts" style="margin-bottom:8px;"></div>
+    <div class="toggle-group" style="margin-bottom:8px;">
+      <button class="toggle-btn active" onclick="switchTrendParam('bonusPM1',this)">ボーナス±1</button>
+      <button class="toggle-btn" onclick="switchTrendParam('consec2',this)">2連番</button>
+      <button class="toggle-btn" onclick="switchTrendParam('carryover',this)">引継ぎ</button>
+      <button class="toggle-btn" onclick="switchTrendParam('slide',this)">スライド</button>
+    </div>
+    <canvas id="trendChart" width="600" height="200" style="width:100%;height:200px;"></canvas>
+    <p style="font-size:11px;color:var(--muted);margin-top:4px;">データ追加ごとに倍率を記録。緑線=1.05x(有効)、赤線=0.95x(無効)</p>
+  </div>
+
+  <div class="card">
     <div class="card-title">🔬 マルコフ連鎖の分解検証</div>
     <p style="font-size:12px;color:var(--muted);margin-bottom:8px">マルコフ連鎖予測の構成要素を個別に倍率測定し、有効な要素を特定します。</p>
     <div id="markovDecompContent" style="font-size:13px"></div>
@@ -638,14 +651,14 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.7</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.8</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.7) — コアプール拡張:<br>
-      • 安定型A/Bのコア選択をTop3固定→Top6プール+C(6,3)組合せに拡張<br>
-      • 10パターンに10種類の異なるコアセットを割当（1数字の最大出現=6回）<br>
-      • スコア+多様性の複合ランキングでコアセット選択<br>
-      • v8.6.1: ボーナス±1過剰評価修正/50パターン出現上限<br>
-      • v8.6: 動的統計/データ整合性/週2回検証/マルコフ分解/合計値フィルタ
+      搭載アルゴリズム (v8.8) — 引継ぎ可視化+動的倍率推移:<br>
+      • 各パターンに前回からの引き継ぎ数バッジを表示（色分け付き）<br>
+      • 実験タブ50パターンに引き継ぎ統計サマリー追加（理論値0.84対比）<br>
+      • 動的倍率の推移をCanvasグラフで可視化（有効/無効ライン付き）<br>
+      • シグナル変化の自動検知アラート（1.05x突破/0.95x突入）<br>
+      • v8.7: コアプール拡張 / v8.6.1: ボーナス±1修正 / v8.6: 動的統計
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -2858,6 +2871,17 @@ function switchTab(idx) {
   if (idx === 6) renderExperimental();
 }
 
+// ============================================================
+// [v8.8] Carryover count calculation
+// ============================================================
+function calcCarryoverCount(predictedNumbers, lastDrawNumbers) {
+  var count = 0;
+  for (var i = 0; i < predictedNumbers.length; i++) {
+    if (lastDrawNumbers.indexOf(predictedNumbers[i]) >= 0) count++;
+  }
+  return count;
+}
+
 function renderMain() {
   const schedule = getDrawSchedule();
   const container = document.getElementById('mainContent');
@@ -2886,12 +2910,16 @@ function renderMain() {
       </div>
     `;
 
+    const lastDrawNums = _data[_data.length - 1].n;
+
     for (const p of pred.predictions) {
       // [v6] Core numbers get gold border for stable patterns
       const coreNums = p.cores || [];
+      const coCount = calcCarryoverCount(p.numbers, lastDrawNums);
+      const coColor = coCount === 0 ? 'var(--muted)' : coCount === 1 ? '#3B82F6' : coCount >= 3 ? '#F59E0B' : '#22C55E';
       html += `
         <div class="pattern-card">
-          <div class="label">${p.icon} ${p.name}</div>
+          <div class="label" style="display:flex;justify-content:space-between;align-items:center">${p.icon} ${p.name}<span style="font-size:11px;font-weight:600;color:${coColor};background:${coColor}15;padding:2px 8px;border-radius:10px;">引継:${coCount}個</span></div>
           <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${p.method}</div>
           <div class="balls">
             ${p.numbers.map((n,i) => {
@@ -3094,6 +3122,9 @@ function renderStats() {
   renderFilterStats();
   renderDynamicStats('full');
   renderMarkovDecomp();
+  saveStatsHistory();
+  drawTrendChart();
+  renderTrendAlerts();
 }
 
 function renderFilterStats() {
@@ -4506,6 +4537,213 @@ function renderDynamicStats(eraKey) {
   el.innerHTML = html;
 }
 
+// ============================================================
+// [v8.8] Stats History & Trend Chart
+// ============================================================
+var _currentTrendParam = 'bonusPM1';
+
+function saveStatsHistory() {
+  try {
+    var eraData = calcStatsByEra();
+    var stats = eraData.full;
+    if (!stats) return;
+
+    var history = LS.get('statsHistory') || [];
+    var entry = {
+      date: new Date().toISOString(),
+      drawCount: stats.totalDraws,
+      bonusPM1: stats.bonusPM1.ratio,
+      consec2: stats.consec2.ratio,
+      consec3: stats.consec3.ratio,
+      carryover: stats.carryover.ratio,
+      slide: stats.slide.ratio,
+      hotHit: stats.hotCold.hotRatio || 1.0,
+      coldHit: stats.hotCold.coldRatio || 1.0
+    };
+
+    if (history.length > 0) {
+      var last = history[history.length - 1];
+      if (last.drawCount === entry.drawCount) return;
+    }
+
+    history.push(entry);
+    if (history.length > 50) history = history.slice(-50);
+    LS.set('statsHistory', history);
+  } catch(e) {
+    console.warn('saveStatsHistory error:', e);
+  }
+}
+
+function switchTrendParam(param, btn) {
+  _currentTrendParam = param;
+  if (btn) {
+    var btns = btn.parentNode.querySelectorAll('.toggle-btn');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.remove('active');
+    btn.classList.add('active');
+  }
+  drawTrendChart();
+}
+
+function drawTrendChart() {
+  var canvas = document.getElementById('trendChart');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+
+  var dpr = window.devicePixelRatio || 1;
+  var rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  var W = rect.width;
+  var H = rect.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  var bgColor = isDark ? '#1e293b' : '#f8fafc';
+  var textColor = isDark ? '#94a3b8' : '#64748b';
+  var gridColor = isDark ? '#334155' : '#e2e8f0';
+
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, W, H);
+
+  var history = LS.get('statsHistory') || [];
+  var param = _currentTrendParam;
+
+  var padL = 40, padR = 10, padT = 15, padB = 25;
+  var chartW = W - padL - padR;
+  var chartH = H - padT - padB;
+
+  var yMin = 0.90, yMax = 1.15;
+
+  function yToPixel(v) { return padT + chartH * (1 - (v - yMin) / (yMax - yMin)); }
+  function xToPixel(i, total) { return padL + (total > 1 ? (i / (total - 1)) * chartW : chartW / 2); }
+
+  ctx.strokeStyle = gridColor;
+  ctx.lineWidth = 0.5;
+  var gridVals = [0.90, 0.95, 1.00, 1.05, 1.10, 1.15];
+  ctx.font = '10px sans-serif';
+  ctx.fillStyle = textColor;
+  ctx.textAlign = 'right';
+  for (var gi = 0; gi < gridVals.length; gi++) {
+    var gy = yToPixel(gridVals[gi]);
+    ctx.beginPath();
+    ctx.moveTo(padL, gy);
+    ctx.lineTo(W - padR, gy);
+    ctx.stroke();
+    ctx.fillText(gridVals[gi].toFixed(2), padL - 4, gy + 3);
+  }
+
+  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = '#22c55e';
+  ctx.beginPath();
+  ctx.moveTo(padL, yToPixel(1.05));
+  ctx.lineTo(W - padR, yToPixel(1.05));
+  ctx.stroke();
+
+  ctx.strokeStyle = '#ef4444';
+  ctx.beginPath();
+  ctx.moveTo(padL, yToPixel(0.95));
+  ctx.lineTo(W - padR, yToPixel(0.95));
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (history.length === 0) {
+    ctx.fillStyle = textColor;
+    ctx.textAlign = 'center';
+    ctx.font = '13px sans-serif';
+    ctx.fillText('データを追加するとここに推移が表示されます', W / 2, H / 2);
+    return;
+  }
+
+  ctx.beginPath();
+  ctx.strokeStyle = '#4287f5';
+  ctx.lineWidth = 2;
+  for (var hi = 0; hi < history.length; hi++) {
+    var val = history[hi][param];
+    if (val === undefined) continue;
+    var hx = xToPixel(hi, history.length);
+    var hy = yToPixel(Math.max(yMin, Math.min(yMax, val)));
+    if (hi === 0) ctx.moveTo(hx, hy);
+    else ctx.lineTo(hx, hy);
+  }
+  ctx.stroke();
+
+  for (var hi2 = 0; hi2 < history.length; hi2++) {
+    var val2 = history[hi2][param];
+    if (val2 === undefined) continue;
+    var hx2 = xToPixel(hi2, history.length);
+    var hy2 = yToPixel(Math.max(yMin, Math.min(yMax, val2)));
+    ctx.beginPath();
+    ctx.arc(hx2, hy2, 3, 0, 2 * Math.PI);
+    ctx.fillStyle = val2 >= 1.05 ? '#22c55e' : val2 <= 0.95 ? '#ef4444' : '#94a3b8';
+    ctx.fill();
+  }
+
+  ctx.fillStyle = textColor;
+  ctx.textAlign = 'center';
+  ctx.font = '10px sans-serif';
+  var labelStep = Math.max(1, Math.floor(history.length / 6));
+  for (var hi3 = 0; hi3 < history.length; hi3 += labelStep) {
+    var hx3 = xToPixel(hi3, history.length);
+    var dc = history[hi3].drawCount;
+    ctx.fillText(dc + '回', hx3, H - 5);
+  }
+}
+
+function detectSignalChanges() {
+  var history = LS.get('statsHistory') || [];
+  if (history.length < 2) return [];
+
+  var alerts = [];
+  var latest = history[history.length - 1];
+  var prev = history[history.length - 2];
+
+  var params = [
+    { key: 'bonusPM1', label: 'ボーナス±1' },
+    { key: 'consec2', label: '2連番' },
+    { key: 'consec3', label: '3連番' },
+    { key: 'carryover', label: 'キャリーオーバー' },
+    { key: 'slide', label: 'スライド' },
+    { key: 'hotHit', label: 'ホット的中' }
+  ];
+
+  for (var i = 0; i < params.length; i++) {
+    var p = params[i];
+    var cur = latest[p.key];
+    var prv = prev[p.key];
+    if (cur === undefined || prv === undefined) continue;
+
+    if (prv < 1.05 && cur >= 1.05) {
+      alerts.push({ type: 'up', msg: '🟢 ' + p.label + ' が有効ライン突破: ' + prv.toFixed(3) + 'x → ' + cur.toFixed(3) + 'x' });
+    }
+    if (prv >= 1.05 && cur < 1.05) {
+      alerts.push({ type: 'down', msg: '🟡 ' + p.label + ' が有効ライン下回り: ' + prv.toFixed(3) + 'x → ' + cur.toFixed(3) + 'x' });
+    }
+    if (prv > 0.95 && cur <= 0.95) {
+      alerts.push({ type: 'danger', msg: '🔴 ' + p.label + ' が無効ライン突入: ' + prv.toFixed(3) + 'x → ' + cur.toFixed(3) + 'x' });
+    }
+  }
+  return alerts;
+}
+
+function renderTrendAlerts() {
+  var el = document.getElementById('trendAlerts');
+  if (!el) return;
+  var alerts = detectSignalChanges();
+  if (alerts.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < alerts.length; i++) {
+    var bgc = alerts[i].type === 'up' ? '#22c55e15' : alerts[i].type === 'danger' ? '#ef444415' : '#f59e0b15';
+    html += '<div style="padding:4px 8px;margin:2px 0;border-radius:4px;background:' + bgc + ';font-size:12px;">' + alerts[i].msg + '</div>';
+  }
+  el.innerHTML = html;
+}
+
 // --- Markov Decomposition Rendering ---
 function renderMarkovDecomp() {
   var el = document.getElementById('markovDecompContent');
@@ -4721,7 +4959,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.7' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.8' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -4737,15 +4975,23 @@ function displayExperimentalResults(results, dateStr) {
     var resultsDiv = document.getElementById('exp-results');
     if (resultsDiv) resultsDiv.style.display = 'block';
 
+    var expData = getAllData();
+    var expLastDraw = expData[expData.length - 1].n;
+
     var allNums = new Set();
     var freq = {};
     var totalPatterns = 0;
+    var coDistribution = [0,0,0,0,0,0,0];
+    var coTotal = 0;
 
     for (var gk in results) {
       var group = results[gk];
       for (var ri = 0; ri < group.length; ri++) {
         if (!group[ri] || !group[ri].numbers) continue;
         totalPatterns++;
+        var co = calcCarryoverCount(group[ri].numbers, expLastDraw);
+        coDistribution[co]++;
+        coTotal += co;
         for (var ni = 0; ni < group[ri].numbers.length; ni++) {
           var n = group[ri].numbers[ni];
           allNums.add(n);
@@ -4809,6 +5055,13 @@ function displayExperimentalResults(results, dateStr) {
         '<p style="font-size:12px;">最頻数字: ' + maxFreq + '回登場 (理想: ' + avgFreq + '回前後)</p>' +
         (divOk ? '<p style="color:#4CAF50;">✅ 多様性は適切</p>' : '<p style="color:#f44336;">⚠️ 特定の数字への偏りが大きいです</p>') +
         dupHtml +
+        '</div>' +
+        '<div style="background:var(--card-bg);padding:8px;border-radius:4px;margin-top:8px;border:1px solid var(--border);">' +
+        '<p><strong>🔄 引き継ぎ統計</strong></p>' +
+        '<p style="font-size:12px;">平均引き継ぎ数: <strong>' + (totalPatterns > 0 ? (coTotal / totalPatterns).toFixed(2) : '0') + '個</strong>（理論値: 0.84個）</p>' +
+        '<p style="font-size:12px;">' +
+        '0個:' + coDistribution[0] + ' / 1個:' + coDistribution[1] + ' / 2個:' + coDistribution[2] +
+        ' / 3個以上:' + (coDistribution[3]+coDistribution[4]+coDistribution[5]+coDistribution[6]) + '</p>' +
         '</div>';
     }
 
@@ -4832,6 +5085,8 @@ function displayExperimentalResults(results, dateStr) {
         var rr = patterns[pi2];
         if (!rr || !rr.numbers) continue;
         var sorted = rr.numbers.slice().sort(function(a,b){return a-b;});
+        var pco = calcCarryoverCount(rr.numbers, expLastDraw);
+        var pcoColor = pco === 0 ? 'var(--muted)' : pco === 1 ? '#3B82F6' : pco >= 3 ? '#F59E0B' : '#22C55E';
         var p = document.createElement('div');
         p.style.cssText = 'padding:6px 8px;margin:2px 0;border-bottom:1px solid var(--border);font-size:14px;display:flex;align-items:center;gap:8px;';
         var mainBadge = rr.isMain ? '<span style="color:#4CAF50;font-weight:bold;font-size:12px;">⭐メイン</span>' : '';
@@ -4839,7 +5094,8 @@ function displayExperimentalResults(results, dateStr) {
           '<span style="color:var(--muted);min-width:28px;">#' + (pi2+1) + '</span>' +
           mainBadge +
           '<span style="font-family:monospace;letter-spacing:1px;">' + sorted.map(function(n){return String(n).padStart(2,'0');}).join(' ') + '</span>' +
-          '<span style="color:var(--accent);font-size:12px;">B:' + (rr.bonus || '?') + '</span>';
+          '<span style="color:var(--accent);font-size:12px;">B:' + (rr.bonus || '?') + '</span>' +
+          '<span style="font-size:11px;color:' + pcoColor + ';">[引継:' + pco + ']</span>';
         div.appendChild(p);
       }
     }
@@ -4864,7 +5120,7 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.7') {
+  if (saved && saved.results && saved.version === 'v8.8') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
@@ -4875,7 +5131,7 @@ function renderExperimental() {
       return;
     }
   }
-  if (saved && saved.version !== 'v8.7') {
+  if (saved && saved.version !== 'v8.8') {
     LS.remove('exp_' + dateStr);
   }
 
