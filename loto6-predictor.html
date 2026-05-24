@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.8
-  Created: 2026-03-16 / Updated: 2026-05-03
+  Loto6 AI Predictor v8.9
+  Created: 2026-03-16 / Updated: 2026-05-25
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
   Single HTML file, no server required.
@@ -643,6 +643,19 @@ body {
   </div>
 
   <div class="card">
+    <div class="card-title">🔧 データ手動修正</div>
+    <div id="data-correction-area" style="font-size:13px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔬 思考間合意倍率検証</div>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:8px">過去データで、複数の思考が独立に同じ数字を選んだ場合の真の出現率を測定します。計算に1-2分かかります。</p>
+    <button class="btn btn-secondary" onclick="runAgreementVerification()" style="width:100%" id="agreementBtn">🔬 検証を実行</button>
+    <div id="agreement-progress" style="margin-top:8px;font-size:13px;"></div>
+    <div id="agreement-result" style="margin-top:8px;font-size:13px;"></div>
+  </div>
+
+  <div class="card">
     <div class="card-title">📊 統計の手動再計算</div>
     <p style="color:var(--muted);font-size:13px;margin-bottom:8px">最新データに基づき全統計パラメータを再計算します。通常はデータ追加時に自動実行されます。</p>
     <button class="btn btn-secondary" onclick="renderDynamicStats('full');showMsg('recalcStatus','統計を再計算しました','success')" style="width:100%">🔄 統計を再計算</button>
@@ -651,14 +664,14 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.8</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.9</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.8) — 引継ぎ可視化+動的倍率推移:<br>
-      • 各パターンに前回からの引き継ぎ数バッジを表示（色分け付き）<br>
-      • 実験タブ50パターンに引き継ぎ統計サマリー追加（理論値0.84対比）<br>
-      • 動的倍率の推移をCanvasグラフで可視化（有効/無効ライン付き）<br>
-      • シグナル変化の自動検知アラート（1.05x突破/0.95x突入）<br>
-      • v8.7: コアプール拡張 / v8.6.1: ボーナス±1修正 / v8.6: 動的統計
+      搭載アルゴリズム (v8.9) — 検証ツール+データ修正:<br>
+      • 思考間合意倍率の検証ツール（過去全データで出現率を実測）<br>
+      • 第1352回等のデータ異常を手動修正するUI<br>
+      • 修正はlocalStorageに保存し全統計に自動反映<br>
+      • v8.8: 引継ぎ可視化/動的倍率推移 / v8.7: コアプール拡張<br>
+      • v8.6.1: ボーナス±1修正 / v8.6: 動的統計/データ整合性
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -757,10 +770,19 @@ const LS = {
 // === DATA MANAGEMENT ===
 function getAllData() {
   const custom = LS.get('customData') || [];
+  const corrections = LS.get('dataCorrections') || {};
   const merged = [...BUILTIN_DATA];
   const ids = new Set(merged.map(d=>d.id));
   for (const c of custom) {
     if (!ids.has(c.id)) { merged.push(c); ids.add(c.id); }
+  }
+  for (let i = 0; i < merged.length; i++) {
+    const corr = corrections[merged[i].id];
+    if (corr) {
+      merged[i] = Object.assign({}, merged[i]);
+      if (corr.b !== undefined) merged[i].b = corr.b;
+      if (corr.n) merged[i].n = corr.n.slice();
+    }
   }
   merged.sort((a,b) => a.id - b.id);
   return merged;
@@ -3829,6 +3851,8 @@ function renderSettings() {
   // [v6-C1] Initialize carryover flag checkbox
   const coEl = document.getElementById('coFlag');
   if (coEl) coEl.checked = LS.get('carryoverFlag') || false;
+
+  renderDataCorrection();
 }
 
 function exportJSON() {
@@ -4188,6 +4212,263 @@ function renderIntegrityCheck() {
   }
   html += '</div>';
   el.innerHTML = html;
+}
+
+// ============================================================
+// [v8.9] Data Correction UI
+// ============================================================
+function renderDataCorrection() {
+  var el = document.getElementById('data-correction-area');
+  if (!el) return;
+  var issues = checkDataIntegrity();
+  if (issues.length === 0) {
+    el.innerHTML = '<p style="color:#4CAF50;">✅ 修正が必要なデータはありません</p>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < issues.length; i++) {
+    var iss = issues[i];
+    var data = getAllData();
+    var drawData = null;
+    for (var d = 0; d < data.length; d++) {
+      if (data[d].id === iss.round) { drawData = data[d]; break; }
+    }
+    if (!drawData) continue;
+
+    html += '<div style="padding:8px;margin:4px 0;border:1px solid var(--border);border-radius:4px;">';
+    html += '<p style="color:#f44336;margin-bottom:4px;">⚠️ 第' + iss.round + '回 [' + iss.type + '] ' + iss.msg + '</p>';
+    html += '<p style="font-size:12px;margin-bottom:4px;">現在のデータ: 本数字=[' + drawData.n.join(', ') + '] ボーナス=' + drawData.b + '</p>';
+
+    if (iss.type === 'bonus_dup') {
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">';
+      html += '<label style="font-size:12px;">正しいボーナス数字:</label>';
+      html += '<input type="number" id="fix-bonus-' + iss.round + '" min="1" max="43" style="width:60px;padding:4px;border:1px solid var(--border);border-radius:4px;">';
+      html += '<button class="btn btn-primary btn-sm" onclick="applyBonusFix(' + iss.round + ')">保存</button>';
+      html += '</div>';
+    } else {
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-top:4px;">';
+      html += '<label style="font-size:12px;">本数字(カンマ区切り):</label>';
+      html += '<input type="text" id="fix-nums-' + iss.round + '" value="' + drawData.n.join(',') + '" style="width:150px;padding:4px;border:1px solid var(--border);border-radius:4px;">';
+      html += '<label style="font-size:12px;">B:</label>';
+      html += '<input type="number" id="fix-bonus-' + iss.round + '" value="' + drawData.b + '" min="1" max="43" style="width:60px;padding:4px;border:1px solid var(--border);border-radius:4px;">';
+      html += '<button class="btn btn-primary btn-sm" onclick="applyFullFix(' + iss.round + ')">保存</button>';
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+  el.innerHTML = html;
+}
+
+function applyBonusFix(round) {
+  var input = document.getElementById('fix-bonus-' + round);
+  if (!input) return;
+  var newBonus = parseInt(input.value);
+  if (isNaN(newBonus) || newBonus < 1 || newBonus > 43) {
+    showMsg('data-correction-area', '1-43の範囲で入力してください', 'error');
+    return;
+  }
+  var data = getAllData();
+  var drawData = null;
+  for (var i = 0; i < data.length; i++) {
+    if (data[i].id === round) { drawData = data[i]; break; }
+  }
+  if (drawData && drawData.n.indexOf(newBonus) >= 0) {
+    showMsg('data-correction-area', 'ボーナス数字(' + newBonus + ')が本数字と重複しています', 'error');
+    return;
+  }
+  var corrections = LS.get('dataCorrections') || {};
+  corrections[round] = corrections[round] || {};
+  corrections[round].b = newBonus;
+  LS.set('dataCorrections', corrections);
+
+  var issues = checkDataIntegrity();
+  var stillHasIssue = false;
+  for (var j = 0; j < issues.length; j++) {
+    if (issues[j].round === round) { stillHasIssue = true; break; }
+  }
+
+  var el = document.getElementById('data-correction-area');
+  if (el) {
+    el.innerHTML = '<p style="color:#4CAF50;">✅ 第' + round + '回のボーナス数字を ' + newBonus + ' に修正しました</p>' +
+      '<p style="color:#4CAF50;">✅ 整合性チェック: ' + (stillHasIssue ? '他の異常あり' : '異常なし') + '</p>' +
+      '<p style="color:#4CAF50;">✅ 統計再計算: 完了（' + getAllData().length + '件のデータで再計算）</p>';
+  }
+  renderIntegrityCheck();
+  showIntegrityWarning();
+}
+
+function applyFullFix(round) {
+  var numsInput = document.getElementById('fix-nums-' + round);
+  var bonusInput = document.getElementById('fix-bonus-' + round);
+  if (!numsInput || !bonusInput) return;
+  var nums = numsInput.value.split(',').map(function(s) { return parseInt(s.trim()); });
+  var bonus = parseInt(bonusInput.value);
+  if (nums.length !== 6 || nums.some(function(n) { return isNaN(n) || n < 1 || n > 43; })) {
+    showMsg('data-correction-area', '本数字は1-43の範囲で6個入力してください', 'error');
+    return;
+  }
+  if (isNaN(bonus) || bonus < 1 || bonus > 43) {
+    showMsg('data-correction-area', 'ボーナスは1-43の範囲で入力してください', 'error');
+    return;
+  }
+  if (new Set(nums).size !== 6) {
+    showMsg('data-correction-area', '本数字に重複があります', 'error');
+    return;
+  }
+  if (nums.indexOf(bonus) >= 0) {
+    showMsg('data-correction-area', 'ボーナスが本数字と重複しています', 'error');
+    return;
+  }
+  var corrections = LS.get('dataCorrections') || {};
+  corrections[round] = { n: nums.sort(function(a,b){return a-b;}), b: bonus };
+  LS.set('dataCorrections', corrections);
+  renderDataCorrection();
+  renderIntegrityCheck();
+  showIntegrityWarning();
+}
+
+// ============================================================
+// [v8.9] Agreement Multiplier Verification Tool
+// ============================================================
+var _agreementRunning = false;
+
+async function runAgreementVerification() {
+  if (_agreementRunning) return;
+  _agreementRunning = true;
+
+  var btn = document.getElementById('agreementBtn');
+  var progressEl = document.getElementById('agreement-progress');
+  var resultEl = document.getElementById('agreement-result');
+  if (btn) btn.disabled = true;
+  if (resultEl) resultEl.innerHTML = '';
+
+  var data = getAllData();
+  if (data.length < 110) {
+    if (progressEl) progressEl.innerHTML = '<span style="color:#f44336;">データが不足しています（最低110回分必要）</span>';
+    _agreementRunning = false;
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  var results = {
+    N2: { hits: 0, total: 0 },
+    N3: { hits: 0, total: 0 },
+    N4: { hits: 0, total: 0 },
+    N5: { hits: 0, total: 0 }
+  };
+
+  var startIdx = 100;
+  var endIdx = data.length - 1;
+  var totalRounds = endIdx - startIdx;
+
+  for (var i = startIdx; i < endIdx; i++) {
+    if (i % 20 === 0 || i === endIdx - 1) {
+      var pct = Math.round(((i - startIdx) / totalRounds) * 100);
+      if (progressEl) progressEl.textContent = '🔄 処理中... ' + (i - startIdx + 1) + '/' + totalRounds + '回 (' + pct + '%)';
+      await new Promise(function(r) { setTimeout(r, 0); });
+    }
+
+    var histData = data.slice(0, i + 1);
+    var nextDraw = data[i + 1];
+    var targetDay = 0;
+    if (nextDraw.d) {
+      var dd = new Date(nextDraw.d);
+      targetDay = dd.getDay();
+    }
+
+    var agreement = new Array(44).fill(0);
+    var seedBase = 'verify_' + nextDraw.id;
+    var weights = [1, 1, 1, 1];
+
+    try {
+      var rng1 = seededRandom(seedBase + '_p1');
+      var pred1 = predictPattern1(histData, rng1, targetDay);
+      if (pred1 && pred1.numbers) for (var a = 0; a < pred1.numbers.length; a++) agreement[pred1.numbers[a]]++;
+    } catch(e) {}
+
+    try {
+      var rng3 = seededRandom(seedBase + '_p3');
+      var pred3 = predictPattern3(histData, rng3, targetDay);
+      if (pred3 && pred3.numbers) for (var b = 0; b < pred3.numbers.length; b++) agreement[pred3.numbers[b]]++;
+    } catch(e) {}
+
+    try {
+      var rng5 = seededRandom(seedBase + '_p5');
+      var pred5 = predictPattern5(histData, rng5, weights, targetDay);
+      if (pred5 && pred5.numbers) for (var c = 0; c < pred5.numbers.length; c++) agreement[pred5.numbers[c]]++;
+    } catch(e) {}
+
+    try {
+      var rngA = seededRandom(seedBase + '_pA');
+      var predA = predictStableA(histData, rngA, targetDay);
+      if (predA && predA.numbers) for (var d2 = 0; d2 < predA.numbers.length; d2++) agreement[predA.numbers[d2]]++;
+    } catch(e) {}
+
+    try {
+      var rngB = seededRandom(seedBase + '_pB');
+      var predB = predictStableB(histData, rngB, targetDay);
+      if (predB && predB.numbers) for (var e2 = 0; e2 < predB.numbers.length; e2++) agreement[predB.numbers[e2]]++;
+    } catch(e) {}
+
+    for (var num = 1; num <= 43; num++) {
+      var ag = agreement[num];
+      var isHit = nextDraw.n.indexOf(num) >= 0;
+      if (ag >= 2) { results.N2.total++; if (isHit) results.N2.hits++; }
+      if (ag >= 3) { results.N3.total++; if (isHit) results.N3.hits++; }
+      if (ag >= 4) { results.N4.total++; if (isHit) results.N4.hits++; }
+      if (ag >= 5) { results.N5.total++; if (isHit) results.N5.hits++; }
+    }
+  }
+
+  var theoretical = 6 / 43;
+  var keys = ['N2', 'N3', 'N4', 'N5'];
+  var labels = ['2思考以上が合意', '3思考以上が合意', '4思考以上が合意', '全5思考が合意'];
+
+  var html = '<table style="width:100%;font-size:12px;border-collapse:collapse;">';
+  html += '<tr style="border-bottom:2px solid var(--border);"><th style="text-align:left;padding:6px;">条件</th>';
+  html += '<th style="text-align:right;padding:6px;">出現率</th><th style="text-align:right;padding:6px;">倍率</th>';
+  html += '<th style="text-align:right;padding:6px;">サンプル数</th><th style="text-align:center;padding:6px;">判定</th></tr>';
+
+  for (var ki = 0; ki < keys.length; ki++) {
+    var k = keys[ki];
+    var r = results[k];
+    var rate = r.total > 0 ? r.hits / r.total : 0;
+    var mult = rate / theoretical;
+    var judgment = '';
+    var judgeColor = '';
+    if (r.total < 50) {
+      judgment = '⚪ データ不足';
+      judgeColor = 'var(--muted)';
+    } else if (mult >= 1.05) {
+      judgment = '✅ 有効';
+      judgeColor = '#22c55e';
+    } else if (mult <= 0.95) {
+      judgment = '❌ 逆効果';
+      judgeColor = '#ef4444';
+    } else {
+      judgment = '🟡 ノイズ';
+      judgeColor = '#f59e0b';
+    }
+
+    html += '<tr style="border-bottom:1px solid var(--border);">';
+    html += '<td style="padding:6px;">N=' + (ki + 2) + ' (' + labels[ki] + ')</td>';
+    html += '<td style="text-align:right;padding:6px;">' + (rate * 100).toFixed(2) + '%</td>';
+    html += '<td style="text-align:right;padding:6px;font-weight:bold;">' + mult.toFixed(3) + 'x</td>';
+    html += '<td style="text-align:right;padding:6px;">' + r.total + '件</td>';
+    html += '<td style="text-align:center;padding:6px;color:' + judgeColor + ';">' + judgment + '</td>';
+    html += '</tr>';
+  }
+  html += '</table>';
+  html += '<div style="margin-top:8px;padding:8px;background:var(--card-bg);border:1px solid var(--border);border-radius:4px;font-size:11px;color:var(--muted);">';
+  html += '<p>理論値: 6/43 = 13.95% (1.000x)</p>';
+  html += '<p>判定基準: ≥1.05x=有効 / 0.95-1.05x=ノイズ / ≤0.95x=逆効果 / サンプル&lt;50=データ不足</p>';
+  html += '</div>';
+
+  if (resultEl) resultEl.innerHTML = html;
+  if (progressEl) progressEl.innerHTML = '<span style="color:#4CAF50;">✅ 検証完了（' + totalRounds + '回分を分析）</span>';
+
+  _agreementRunning = false;
+  if (btn) btn.disabled = false;
 }
 
 // --- Item 2: Dynamic Stats Engine ---
@@ -4959,7 +5240,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.8' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.9' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -5120,7 +5401,7 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.8') {
+  if (saved && saved.results && saved.version === 'v8.9') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
@@ -5131,7 +5412,7 @@ function renderExperimental() {
       return;
     }
   }
-  if (saved && saved.version !== 'v8.8') {
+  if (saved && saved.version !== 'v8.9') {
     LS.remove('exp_' + dateStr);
   }
 
