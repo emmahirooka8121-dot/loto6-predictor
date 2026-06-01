@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v8.9
-  Created: 2026-03-16 / Updated: 2026-05-25
+  Loto6 AI Predictor v9.0
+  Created: 2026-03-16 / Updated: 2026-06-01
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
   Single HTML file, no server required.
@@ -622,7 +622,7 @@ body {
   <div class="card">
     <div class="card-title">🎰 キャリーオーバー設定</div>
     <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
-      <input type="checkbox" id="coFlag" onchange="LS.set('carryoverFlag',this.checked)">
+      <input type="checkbox" id="coFlag" onchange="LS.set('carryoverFlag',this.checked);var me=document.getElementById('coFlagMain');if(me)me.checked=this.checked;">
       キャリーオーバー発生中
     </label>
     <div style="font-size:11px;color:var(--muted);margin-top:4px">ONにすると購入推奨度に+10</div>
@@ -664,14 +664,13 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v8.9</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.0</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v8.9) — 検証ツール+データ修正:<br>
-      • 思考間合意倍率の検証ツール（過去全データで出現率を実測）<br>
-      • 第1352回等のデータ異常を手動修正するUI<br>
-      • 修正はlocalStorageに保存し全統計に自動反映<br>
-      • v8.8: 引継ぎ可視化/動的倍率推移 / v8.7: コアプール拡張<br>
-      • v8.6.1: ボーナス±1修正 / v8.6: 動的統計/データ整合性
+      搭載アルゴリズム (v9.0) — キャリーオーバー切替UI改善:<br>
+      • 予測タブにキャリーオーバーのトグルスイッチを追加<br>
+      • 設定タブと予測タブで双方向同期（同一localStorage参照）<br>
+      • v8.9: 思考間合意検証/データ修正UI / v8.8: 引継ぎ可視化<br>
+      • v8.7: コアプール拡張 / v8.6: 動的統計/データ整合性
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -2904,6 +2903,13 @@ function calcCarryoverCount(predictedNumbers, lastDrawNumbers) {
   return count;
 }
 
+function toggleCarryoverFromMain(checked) {
+  LS.set('carryoverFlag', checked);
+  var settingsEl = document.getElementById('coFlag');
+  if (settingsEl) settingsEl.checked = checked;
+  renderMain();
+}
+
 function renderMain() {
   const schedule = getDrawSchedule();
   const container = document.getElementById('mainContent');
@@ -2918,6 +2924,8 @@ function renderMain() {
     const scoreEmoji = purchaseScore >= 80 ? '🟢' : purchaseScore >= 60 ? '🟡' : '🔴';
     const scoreLabel = purchaseScore >= 80 ? '強く推奨' : purchaseScore >= 60 ? 'やや推奨' : '様子見';
 
+    const _coFlag = LS.get('carryoverFlag') || false;
+
     let html = `
       <div class="card text-center">
         <div style="font-size:18px;font-weight:700;color:var(--primary)">
@@ -2929,6 +2937,14 @@ function renderMain() {
         <div style="font-size:14px;font-weight:700">購入推奨度</div>
         <div style="font-size:36px;font-weight:700;color:${scoreColor};font-family:var(--mono)">${scoreEmoji} ${purchaseScore}/100</div>
         <div style="font-size:13px;color:var(--muted)">${scoreLabel}</div>
+      </div>
+      <div class="card" style="padding:10px 16px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:14px;font-weight:600;">🎰 キャリーオーバー</span>
+        <label style="position:relative;display:inline-block;width:48px;height:26px;cursor:pointer;">
+          <input type="checkbox" id="coFlagMain" ${_coFlag ? 'checked' : ''} onchange="toggleCarryoverFromMain(this.checked)" style="opacity:0;width:0;height:0;">
+          <span style="position:absolute;top:0;left:0;right:0;bottom:0;background:${_coFlag ? '#10B981' : '#cbd5e1'};border-radius:13px;transition:background 0.3s;"></span>
+          <span style="position:absolute;top:2px;left:${_coFlag ? '24px' : '2px'};width:22px;height:22px;background:white;border-radius:50%;transition:left 0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></span>
+        </label>
       </div>
     `;
 
@@ -5240,7 +5256,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v8.9' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v9.0' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -5401,7 +5417,7 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v8.9') {
+  if (saved && saved.results && saved.version === 'v9.0') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
@@ -5412,7 +5428,7 @@ function renderExperimental() {
       return;
     }
   }
-  if (saved && saved.version !== 'v8.9') {
+  if (saved && saved.version !== 'v9.0') {
     LS.remove('exp_' + dateStr);
   }
 
