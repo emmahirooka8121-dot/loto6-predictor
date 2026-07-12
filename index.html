@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v9.0
-  Created: 2026-03-16 / Updated: 2026-06-01
+  Loto6 AI Predictor v9.1
+  Created: 2026-03-16 / Updated: 2026-07-09
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
   Single HTML file, no server required.
@@ -664,13 +664,14 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.0</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.1</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v9.0) — キャリーオーバー切替UI改善:<br>
-      • 予測タブにキャリーオーバーのトグルスイッチを追加<br>
-      • 設定タブと予測タブで双方向同期（同一localStorage参照）<br>
-      • v8.9: 思考間合意検証/データ修正UI / v8.8: 引継ぎ可視化<br>
-      • v8.7: コアプール拡張 / v8.6: 動的統計/データ整合性
+      搭載アルゴリズム (v9.1) — 実験タブ高速化+表記改善:<br>
+      • 起動時にバックグラウンドで50パターンを事前生成（タブ即時表示）<br>
+      • パターン表記を#1〜#10からA〜Jのアルファベットに変更<br>
+      • データ追加・リセット時のキャッシュ自動無効化<br>
+      • v9.0: CO切替UI / v8.9: 合意検証/データ修正<br>
+      • v8.8: 引継ぎ可視化 / v8.7: コアプール拡張
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -685,7 +686,7 @@ body {
     <div class="card-title">🧪 実験モード - 50パターン予測</div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
       5つの思考 × 各10パターン = 50パターンの予測を自動生成します。<br>
-      各思考のパターン#1は予測タブのメイン予測と同一です。
+      各思考のパターンAは予測タブのメイン予測と同一です。
     </p>
     <div id="exp-status" style="margin-top:8px;font-size:13px;color:var(--muted)"></div>
   </div>
@@ -3704,6 +3705,7 @@ function addResult() {
   // Update weights and stats after adding result
   updateWeights();
   updateSumFilter();
+  invalidateExpCache();
 
   showMsg('addResultMsg', `第${roundVal}回を追加しました`, 'success');
 
@@ -4165,10 +4167,65 @@ function init() {
   renderMain();
   renderPastPredictions();
   showIntegrityWarning();
+  scheduleExperimentPregeneration();
 }
+
 // ============================================================
-// [v8.6] Dynamic Stats Engine + Data Integrity + Era Analysis
+// [v9.1] Experiment Pre-generation Cache
 // ============================================================
+var _expCache = { ready: false, drawCount: null, dateStr: null, generating: false };
+
+function scheduleExperimentPregeneration() {
+  var schedule = getDrawSchedule();
+  if (!schedule.showPrediction) return;
+  var data = getAllData();
+  var dateStr = schedule.targetDraw.getFullYear() + '-' + String(schedule.targetDraw.getMonth()+1).padStart(2,'0') + '-' + String(schedule.targetDraw.getDate()).padStart(2,'0');
+
+  var saved = LS.get('exp_' + dateStr);
+  if (saved && saved.results && saved.version === 'v9.1') {
+    var total = 0;
+    for (var gk in saved.results) total += saved.results[gk].length;
+    if (total >= 50) {
+      _expCache.ready = true;
+      _expCache.drawCount = data.length;
+      _expCache.dateStr = dateStr;
+      return;
+    }
+  }
+
+  if (_expCache.generating) return;
+  var fn = window.requestIdleCallback || function(cb) { setTimeout(cb, 300); };
+  fn(function() { pregenerateExperiment(); });
+}
+
+async function pregenerateExperiment() {
+  if (_expCache.generating) return;
+  _expCache.generating = true;
+  try {
+    await generate50Patterns();
+    var data = getAllData();
+    var schedule = getDrawSchedule();
+    var dateStr = schedule.targetDraw.getFullYear() + '-' + String(schedule.targetDraw.getMonth()+1).padStart(2,'0') + '-' + String(schedule.targetDraw.getDate()).padStart(2,'0');
+    _expCache.ready = true;
+    _expCache.drawCount = data.length;
+    _expCache.dateStr = dateStr;
+  } catch(e) {
+    console.warn('pregenerateExperiment error:', e);
+  }
+  _expCache.generating = false;
+}
+
+function invalidateExpCache() {
+  _expCache.ready = false;
+  _expCache.drawCount = null;
+  _expCache.dateStr = null;
+  var schedule = getDrawSchedule();
+  if (schedule.showPrediction) {
+    var dateStr = schedule.targetDraw.getFullYear() + '-' + String(schedule.targetDraw.getMonth()+1).padStart(2,'0') + '-' + String(schedule.targetDraw.getDate()).padStart(2,'0');
+    LS.remove('exp_' + dateStr);
+  }
+  scheduleExperimentPregeneration();
+}
 
 // --- Item 1: Data Integrity Check ---
 function checkDataIntegrity() {
@@ -5256,7 +5313,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v9.0' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v9.1' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -5388,7 +5445,7 @@ function displayExperimentalResults(results, dateStr) {
         p.style.cssText = 'padding:6px 8px;margin:2px 0;border-bottom:1px solid var(--border);font-size:14px;display:flex;align-items:center;gap:8px;';
         var mainBadge = rr.isMain ? '<span style="color:#4CAF50;font-weight:bold;font-size:12px;">⭐メイン</span>' : '';
         p.innerHTML =
-          '<span style="color:var(--muted);min-width:28px;">#' + (pi2+1) + '</span>' +
+          '<span style="color:var(--muted);min-width:28px;">' + String.fromCharCode(65 + pi2) + '</span>' +
           mainBadge +
           '<span style="font-family:monospace;letter-spacing:1px;">' + sorted.map(function(n){return String(n).padStart(2,'0');}).join(' ') + '</span>' +
           '<span style="color:var(--accent);font-size:12px;">B:' + (rr.bonus || '?') + '</span>' +
@@ -5417,22 +5474,33 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v9.0') {
+  if (saved && saved.results && saved.version === 'v9.1') {
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
     if (total >= 50) {
       displayExperimentalResults(saved.results, dateStr);
-      if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の保存済み' + total + 'パターン';
+      if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン（事前生成済み）';
       if (resultsEl) resultsEl.style.display = 'block';
       renderExpHistory();
       return;
     }
   }
-  if (saved && saved.version !== 'v9.0') {
+  if (saved && saved.version !== 'v9.1') {
     LS.remove('exp_' + dateStr);
   }
 
-  generate50Patterns().then(function() { renderExpHistory(); }).catch(function(e) { console.error('renderExperimental error:', e); });
+  if (_expCache.generating) {
+    if (statusEl) statusEl.textContent = '🔄 バックグラウンドで生成中...しばらくお待ちください';
+    var pollId = setInterval(function() {
+      if (!_expCache.generating) {
+        clearInterval(pollId);
+        renderExperimental();
+      }
+    }, 500);
+    return;
+  }
+
+  generate50Patterns().then(function() { _expCache.ready = true; _expCache.drawCount = getAllData().length; _expCache.dateStr = dateStr; renderExpHistory(); }).catch(function(e) { console.error('renderExperimental error:', e); });
 }
 
 function resetExpData() {
@@ -5441,7 +5509,11 @@ function resetExpData() {
   if (status) status.textContent = '削除中...';
   var keys = LS.keys().filter(function(k){return k.startsWith('exp_');});
   for (var i = 0; i < keys.length; i++) LS.remove(keys[i]);
+  _expCache.ready = false;
+  _expCache.drawCount = null;
+  _expCache.dateStr = null;
   if (status) status.innerHTML = '<span style="color:#4CAF50;">✅ ' + keys.length + '件の実験データを削除しました</span>';
+  scheduleExperimentPregeneration();
 }
 
 function renderExpHistory() {
@@ -5566,7 +5638,7 @@ function renderExpHistory() {
         var mainTag = dp.isMain ? ' <span style="color:#4CAF50;font-weight:bold;font-size:10px;">⭐</span>' : '';
 
         detailInner += '<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:12px;">' +
-          '<span style="color:var(--muted);min-width:24px;display:inline-block;">#'+(dpi+1)+'</span>' +
+          '<span style="color:var(--muted);min-width:24px;display:inline-block;">'+String.fromCharCode(65+dpi)+'</span>' +
           mainTag + ballsHtml + bonusHtml + badge + '</div>';
       }
 
