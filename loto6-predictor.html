@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v9.1
-  Created: 2026-03-16 / Updated: 2026-07-09
+  Loto6 AI Predictor v9.2
+  Created: 2026-03-16 / Updated: 2026-07-12
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
   Single HTML file, no server required.
@@ -664,13 +664,13 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.1</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.2</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v9.1) — 実験タブ高速化+表記改善:<br>
-      • 起動時にバックグラウンドで50パターンを事前生成（タブ即時表示）<br>
-      • パターン表記を#1〜#10からA〜Jのアルファベットに変更<br>
-      • データ追加・リセット時のキャッシュ自動無効化<br>
-      • v9.0: CO切替UI / v8.9: 合意検証/データ修正<br>
+      搭載アルゴリズム (v9.2) — 実験タブ事前生成の不具合修正:<br>
+      • サイレント事前生成（DOM非書き込み）でバックグラウンド生成を実現<br>
+      • drawCountベースのキャッシュ検証で確実な永続化復元<br>
+      • リロード後もlocalStorageから即時表示（再計算不要）<br>
+      • v9.1: A〜J表記 / v9.0: CO切替UI / v8.9: 合意検証<br>
       • v8.8: 引継ぎ可視化 / v8.7: コアプール拡張
     </p>
     <p class="disclaimer">
@@ -4171,57 +4171,59 @@ function init() {
 }
 
 // ============================================================
-// [v9.1] Experiment Pre-generation Cache
+// [v9.2] Experiment Pre-generation & Persistent Cache
 // ============================================================
-var _expCache = { ready: false, drawCount: null, dateStr: null, generating: false };
+var _expGenerating = false;
+var _expGeneratingPromise = null;
 
-function scheduleExperimentPregeneration() {
+function getExpDateStr() {
   var schedule = getDrawSchedule();
-  if (!schedule.showPrediction) return;
-  var data = getAllData();
-  var dateStr = schedule.targetDraw.getFullYear() + '-' + String(schedule.targetDraw.getMonth()+1).padStart(2,'0') + '-' + String(schedule.targetDraw.getDate()).padStart(2,'0');
-
-  var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v9.1') {
-    var total = 0;
-    for (var gk in saved.results) total += saved.results[gk].length;
-    if (total >= 50) {
-      _expCache.ready = true;
-      _expCache.drawCount = data.length;
-      _expCache.dateStr = dateStr;
-      return;
-    }
-  }
-
-  if (_expCache.generating) return;
-  var fn = window.requestIdleCallback || function(cb) { setTimeout(cb, 300); };
-  fn(function() { pregenerateExperiment(); });
+  var td = schedule.targetDraw;
+  return td.getFullYear() + '-' + String(td.getMonth()+1).padStart(2,'0') + '-' + String(td.getDate()).padStart(2,'0');
 }
 
-async function pregenerateExperiment() {
-  if (_expCache.generating) return;
-  _expCache.generating = true;
+function loadExpCache() {
   try {
-    await generate50Patterns();
-    var data = getAllData();
     var schedule = getDrawSchedule();
-    var dateStr = schedule.targetDraw.getFullYear() + '-' + String(schedule.targetDraw.getMonth()+1).padStart(2,'0') + '-' + String(schedule.targetDraw.getDate()).padStart(2,'0');
-    _expCache.ready = true;
-    _expCache.drawCount = data.length;
-    _expCache.dateStr = dateStr;
-  } catch(e) {
-    console.warn('pregenerateExperiment error:', e);
-  }
-  _expCache.generating = false;
+    if (!schedule.showPrediction) return null;
+    var dateStr = getExpDateStr();
+    var saved = LS.get('exp_' + dateStr);
+    if (!saved || !saved.results || saved.version !== 'v9.2') return null;
+    if (saved.drawCount !== getAllData().length) return null;
+    var total = 0;
+    for (var gk in saved.results) total += saved.results[gk].length;
+    return total >= 50 ? saved : null;
+  } catch(e) { return null; }
+}
+
+function scheduleExperimentPregeneration() {
+  if (loadExpCache()) return;
+  var schedule = getDrawSchedule();
+  if (!schedule.showPrediction) return;
+  if (_expGenerating) return;
+  setTimeout(function() { pregenerateExperimentSilent(); }, 800);
+}
+
+async function pregenerateExperimentSilent() {
+  if (_expGenerating) return;
+  if (loadExpCache()) return;
+  _expGenerating = true;
+  _expGeneratingPromise = (async function() {
+    try {
+      await generate50PatternsSilent();
+    } catch(e) {
+      console.warn('pregenerateExperiment error:', e);
+    }
+    _expGenerating = false;
+    _expGeneratingPromise = null;
+  })();
+  await _expGeneratingPromise;
 }
 
 function invalidateExpCache() {
-  _expCache.ready = false;
-  _expCache.drawCount = null;
-  _expCache.dateStr = null;
   var schedule = getDrawSchedule();
   if (schedule.showPrediction) {
-    var dateStr = schedule.targetDraw.getFullYear() + '-' + String(schedule.targetDraw.getMonth()+1).padStart(2,'0') + '-' + String(schedule.targetDraw.getDate()).padStart(2,'0');
+    var dateStr = getExpDateStr();
     LS.remove('exp_' + dateStr);
   }
   scheduleExperimentPregeneration();
@@ -5313,7 +5315,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, createdAt: new Date().toISOString(), version: 'v9.1' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.2' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -5322,6 +5324,133 @@ async function generate50Patterns() {
     console.error('generate50Patterns error:', error);
     if (statusEl) statusEl.innerHTML = '<span style="color:#f44336;">❌ エラー: ' + error.message + '</span>';
   }
+}
+
+async function generate50PatternsSilent() {
+  var data = getAllData();
+  if (!data || data.length < 10) return;
+
+  var schedule = getDrawSchedule();
+  var targetDate = schedule.targetDraw;
+  var dateStr = targetDate.getFullYear() + '-' + String(targetDate.getMonth()+1).padStart(2,'0') + '-' + String(targetDate.getDate()).padStart(2,'0');
+  var targetDay = targetDate.getDay();
+  var weights = LS.get('ensembleWeights') || [1,1,1,1];
+
+  var corePoolA = buildCorePool(data, 'A');
+  var coreSetsA = selectCoreSets(corePoolA, 10);
+  var corePoolB = buildCorePool(data, 'B');
+  var coreSetsB = selectCoreSets(corePoolB, 10);
+
+  var mainPred = null;
+  try { mainPred = generatePredictions(targetDate, schedule.targetRound); } catch(e) {}
+
+  var strategyFns = [
+    { key: 'hot', fn: function(d,r) { return predictPattern1(d,r,targetDay); } },
+    { key: 'markov', fn: function(d,r) { return predictPattern3(d,r,targetDay); } },
+    { key: 'ensemble', fn: function(d,r) { return predictPattern5(d,r,weights,targetDay); } },
+    { key: 'stableA', fn: function(d,r,cs) { return predictStableA(d,r,targetDay,cs); } },
+    { key: 'stableB', fn: function(d,r,cs) { return predictStableB(d,r,targetDay,cs); } },
+  ];
+
+  var results = {};
+  var globalNumCounts = {};
+  var MAX_PER_NUMBER = 15;
+
+  function exceedsNumCap(nums) {
+    for (var c = 0; c < nums.length; c++) {
+      if ((globalNumCounts[nums[c]] || 0) >= MAX_PER_NUMBER) return true;
+    }
+    return false;
+  }
+  function updateNumCounts(nums) {
+    for (var c = 0; c < nums.length; c++) {
+      globalNumCounts[nums[c]] = (globalNumCounts[nums[c]] || 0) + 1;
+    }
+  }
+
+  for (var si = 0; si < strategyFns.length; si++) {
+    var strat = strategyFns[si];
+    results[strat.key] = [];
+
+    await new Promise(function(r){setTimeout(r,0);});
+
+    if (mainPred && mainPred.predictions && mainPred.predictions[si]) {
+      var mp = mainPred.predictions[si];
+      if (mp.numbers && mp.numbers.length === 6) {
+        results[strat.key].push({ numbers: mp.numbers.slice(), bonus: mp.bonus, isMain: true });
+        updateNumCounts(mp.numbers);
+      }
+    }
+
+    while (results[strat.key].length < 10) {
+      var pi = results[strat.key].length;
+      var result = null;
+      var coreSet = null;
+      if (strat.key === 'stableA' && coreSetsA[pi]) coreSet = coreSetsA[pi];
+      else if (strat.key === 'stableB' && coreSetsB[pi]) coreSet = coreSetsB[pi];
+
+      for (var attempt = 0; attempt < 200 && !result; attempt++) {
+        try {
+          var seed = dateStr + '_exp_' + strat.key + '_p' + pi + '_a' + attempt;
+          var rng = seededRandom(seed);
+          for (var w = 0; w < 10 + attempt; w++) rng();
+          var r = strat.fn(data, rng, coreSet);
+          if (r && r.numbers && r.numbers.length === 6) {
+            if (!isTooSimilar(r.numbers, results[strat.key], 5) && !exceedsNumCap(r.numbers)) {
+              result = r;
+            }
+          }
+        } catch(e) {}
+      }
+
+      if (!result) {
+        for (var attempt2 = 0; attempt2 < 200 && !result; attempt2++) {
+          try {
+            var seed2 = dateStr + '_relax6_' + strat.key + '_p' + pi + '_a' + attempt2;
+            var rng2 = seededRandom(seed2);
+            for (var w2 = 0; w2 < 20 + attempt2 * 3; w2++) rng2();
+            var r2 = strat.fn(data, rng2, coreSet);
+            if (r2 && r2.numbers && r2.numbers.length === 6) {
+              if (!isExactDuplicate(r2.numbers, results[strat.key]) && !exceedsNumCap(r2.numbers)) {
+                result = r2;
+              }
+            }
+          } catch(e) {}
+        }
+      }
+
+      if (!result) {
+        var lastPat = results[strat.key][results[strat.key].length - 1];
+        if (lastPat && lastPat.numbers) {
+          for (var attempt3 = 0; attempt3 < 100 && !result; attempt3++) {
+            var nums = lastPat.numbers.slice();
+            var numToChange = 1 + Math.floor(Math.random() * 2);
+            for (var kk = 0; kk < numToChange; kk++) {
+              var idx = Math.floor(Math.random() * 6);
+              var newNum;
+              do { newNum = 1 + Math.floor(Math.random() * 43); } while (nums.indexOf(newNum) >= 0);
+              nums[idx] = newNum;
+            }
+            nums.sort(function(a,b){return a-b;});
+            if (!isExactDuplicate(nums, results[strat.key]) && !exceedsNumCap(nums)) {
+              result = { numbers: nums, bonus: lastPat.bonus };
+            }
+          }
+        }
+      }
+
+      if (result) {
+        results[strat.key].push(result);
+        updateNumCounts(result.numbers);
+      } else {
+        break;
+      }
+
+      if (pi % 3 === 0) await new Promise(function(r){setTimeout(r,0);});
+    }
+  }
+
+  LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.2' });
 }
 
 function displayExperimentalResults(results, dateStr) {
@@ -5473,34 +5602,29 @@ function renderExperimental() {
     return;
   }
 
-  var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.results && saved.version === 'v9.1') {
+  var cached = loadExpCache();
+  if (cached) {
     var total = 0;
-    for (var gk in saved.results) total += saved.results[gk].length;
-    if (total >= 50) {
-      displayExperimentalResults(saved.results, dateStr);
-      if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン（事前生成済み）';
-      if (resultsEl) resultsEl.style.display = 'block';
-      renderExpHistory();
-      return;
-    }
-  }
-  if (saved && saved.version !== 'v9.1') {
-    LS.remove('exp_' + dateStr);
-  }
-
-  if (_expCache.generating) {
-    if (statusEl) statusEl.textContent = '🔄 バックグラウンドで生成中...しばらくお待ちください';
-    var pollId = setInterval(function() {
-      if (!_expCache.generating) {
-        clearInterval(pollId);
-        renderExperimental();
-      }
-    }, 500);
+    for (var gk in cached.results) total += cached.results[gk].length;
+    displayExperimentalResults(cached.results, dateStr);
+    if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン（キャッシュ済み）';
+    if (resultsEl) resultsEl.style.display = 'block';
+    renderExpHistory();
     return;
   }
 
-  generate50Patterns().then(function() { _expCache.ready = true; _expCache.drawCount = getAllData().length; _expCache.dateStr = dateStr; renderExpHistory(); }).catch(function(e) { console.error('renderExperimental error:', e); });
+  var saved = LS.get('exp_' + dateStr);
+  if (saved && saved.version !== 'v9.2') {
+    LS.remove('exp_' + dateStr);
+  }
+
+  if (_expGenerating && _expGeneratingPromise) {
+    if (statusEl) statusEl.textContent = '🔄 バックグラウンドで生成中...しばらくお待ちください';
+    _expGeneratingPromise.then(function() { renderExperimental(); });
+    return;
+  }
+
+  generate50Patterns().then(function() { renderExpHistory(); }).catch(function(e) { console.error('renderExperimental error:', e); });
 }
 
 function resetExpData() {
@@ -5509,9 +5633,6 @@ function resetExpData() {
   if (status) status.textContent = '削除中...';
   var keys = LS.keys().filter(function(k){return k.startsWith('exp_');});
   for (var i = 0; i < keys.length; i++) LS.remove(keys[i]);
-  _expCache.ready = false;
-  _expCache.drawCount = null;
-  _expCache.dateStr = null;
   if (status) status.innerHTML = '<span style="color:#4CAF50;">✅ ' + keys.length + '件の実験データを削除しました</span>';
   scheduleExperimentPregeneration();
 }
