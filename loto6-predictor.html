@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v9.2
-  Created: 2026-03-16 / Updated: 2026-07-12
+  Loto6 AI Predictor v9.3
+  Created: 2026-03-16 / Updated: 2026-07-16
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
   Single HTML file, no server required.
@@ -643,7 +643,17 @@ body {
   </div>
 
   <div class="card">
-    <div class="card-title">🔧 データ手動修正</div>
+    <div class="card-title">📝 当選結果の修正・削除</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+      <label style="font-size:13px;white-space:nowrap;">回号:</label>
+      <input type="number" id="editRoundInput" placeholder="例: 2120" style="width:90px;padding:6px;border:1px solid var(--border);border-radius:4px;">
+      <button class="btn btn-secondary btn-sm" onclick="loadRoundForEdit()">読み込み</button>
+    </div>
+    <div id="edit-round-area" style="font-size:13px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔧 データ整合性の修正</div>
     <div id="data-correction-area" style="font-size:13px;"></div>
   </div>
 
@@ -664,14 +674,14 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.2</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.3</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v9.2) — 実験タブ事前生成の不具合修正:<br>
-      • サイレント事前生成（DOM非書き込み）でバックグラウンド生成を実現<br>
-      • drawCountベースのキャッシュ検証で確実な永続化復元<br>
-      • リロード後もlocalStorageから即時表示（再計算不要）<br>
-      • v9.1: A〜J表記 / v9.0: CO切替UI / v8.9: 合意検証<br>
-      • v8.8: 引継ぎ可視化 / v8.7: コアプール拡張
+      搭載アルゴリズム (v9.3) — 当選結果の修正・削除機能:<br>
+      • 任意の回の当選結果を修正・削除する汎用UI<br>
+      • 内蔵データは修正のみ可、ユーザー入力データは削除も可<br>
+      • 修正後の統計・キャッシュ自動再計算連動<br>
+      • v9.2: 事前生成修正 / v9.1: A〜J表記 / v9.0: CO切替<br>
+      • v8.9: 合意検証 / v8.8: 引継ぎ可視化 / v8.7: コアプール
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -4188,7 +4198,8 @@ function loadExpCache() {
     if (!schedule.showPrediction) return null;
     var dateStr = getExpDateStr();
     var saved = LS.get('exp_' + dateStr);
-    if (!saved || !saved.results || saved.version !== 'v9.2') return null;
+    if (!saved || !saved.results) return null;
+    if (!saved.drawCount) return null;
     if (saved.drawCount !== getAllData().length) return null;
     var total = 0;
     for (var gk in saved.results) total += saved.results[gk].length;
@@ -4400,6 +4411,171 @@ function applyFullFix(round) {
   renderDataCorrection();
   renderIntegrityCheck();
   showIntegrityWarning();
+}
+
+// ============================================================
+// [v9.3] Universal Round Edit / Delete
+// ============================================================
+var _builtinMaxId = 2093;
+
+function isBuiltinRound(roundId) {
+  return roundId <= _builtinMaxId;
+}
+
+function loadRoundForEdit() {
+  var input = document.getElementById('editRoundInput');
+  var el = document.getElementById('edit-round-area');
+  if (!input || !el) return;
+  var roundId = parseInt(input.value);
+  if (isNaN(roundId) || roundId < 1) {
+    el.innerHTML = '<span style="color:var(--danger);">有効な回号を入力してください</span>';
+    return;
+  }
+
+  var data = getAllData();
+  var drawData = null;
+  for (var i = 0; i < data.length; i++) {
+    if (data[i].id === roundId) { drawData = data[i]; break; }
+  }
+
+  if (!drawData) {
+    el.innerHTML = '<span style="color:var(--muted);">第' + roundId + '回のデータは登録されていません</span>';
+    return;
+  }
+
+  var isBuiltin = isBuiltinRound(roundId);
+  var html = '<div style="padding:8px;border:1px solid var(--border);border-radius:4px;">';
+  html += '<p style="font-weight:600;margin-bottom:8px;">第' + roundId + '回 (' + (drawData.d || '日付不明') + ')' +
+    (isBuiltin ? ' <span style="font-size:11px;color:var(--muted);">内蔵データ</span>' : ' <span style="font-size:11px;color:#3B82F6;">ユーザー入力</span>') + '</p>';
+
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">';
+  html += '<label style="font-size:12px;min-width:50px;">本数字:</label>';
+  for (var ni = 0; ni < 6; ni++) {
+    html += '<input type="number" id="editN' + ni + '" value="' + drawData.n[ni] + '" min="1" max="43" style="width:48px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center;">';
+  }
+  html += '</div>';
+
+  html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">';
+  html += '<label style="font-size:12px;min-width:50px;">ボーナス:</label>';
+  html += '<input type="number" id="editBonus" value="' + drawData.b + '" min="1" max="43" style="width:48px;padding:4px;border:1px solid var(--border);border-radius:4px;text-align:center;">';
+  html += '</div>';
+
+  if (!isBuiltin) {
+    html += '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;">';
+    html += '<label style="font-size:12px;min-width:50px;">抽選日:</label>';
+    html += '<input type="date" id="editDate" value="' + (drawData.d || '') + '" style="padding:4px;border:1px solid var(--border);border-radius:4px;">';
+    html += '</div>';
+  }
+
+  html += '<div style="display:flex;gap:8px;margin-top:8px;">';
+  html += '<button class="btn btn-primary btn-sm" onclick="saveRoundEdit(' + roundId + ')">修正を保存</button>';
+  if (!isBuiltin) {
+    html += '<button class="btn btn-danger btn-sm" onclick="deleteRound(' + roundId + ')">この回を削除</button>';
+  } else {
+    html += '<span style="font-size:11px;color:var(--muted);padding:6px;">※内蔵データは削除不可（修正のみ）</span>';
+  }
+  html += '</div>';
+
+  html += '<div id="edit-round-msg" style="margin-top:8px;font-size:13px;"></div>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
+function saveRoundEdit(roundId) {
+  var nums = [];
+  for (var i = 0; i < 6; i++) {
+    var v = parseInt(document.getElementById('editN' + i).value);
+    if (isNaN(v) || v < 1 || v > 43) {
+      showMsg('edit-round-msg', '本数字は1〜43の範囲で入力してください', 'error');
+      return;
+    }
+    nums.push(v);
+  }
+  var bonus = parseInt(document.getElementById('editBonus').value);
+  if (isNaN(bonus) || bonus < 1 || bonus > 43) {
+    showMsg('edit-round-msg', 'ボーナスは1〜43の範囲で入力してください', 'error');
+    return;
+  }
+  if (new Set(nums).size !== 6) {
+    showMsg('edit-round-msg', '本数字に重複があります', 'error');
+    return;
+  }
+  if (nums.indexOf(bonus) >= 0) {
+    showMsg('edit-round-msg', 'ボーナスが本数字と重複しています', 'error');
+    return;
+  }
+  nums.sort(function(a,b){return a-b;});
+
+  if (isBuiltinRound(roundId)) {
+    var corrections = LS.get('dataCorrections') || {};
+    corrections[roundId] = { n: nums, b: bonus };
+    LS.set('dataCorrections', corrections);
+  } else {
+    var custom = LS.get('customData') || [];
+    var dateEl = document.getElementById('editDate');
+    var dateVal = dateEl ? dateEl.value : '';
+    for (var ci = 0; ci < custom.length; ci++) {
+      if (custom[ci].id === roundId) {
+        custom[ci].n = nums;
+        custom[ci].b = bonus;
+        if (dateVal) custom[ci].d = dateVal;
+        break;
+      }
+    }
+    LS.set('customData', custom);
+  }
+
+  afterDataChange(roundId, '修正');
+}
+
+function deleteRound(roundId) {
+  if (isBuiltinRound(roundId)) {
+    showMsg('edit-round-msg', '内蔵データは削除できません', 'error');
+    return;
+  }
+  if (!confirm('第' + roundId + '回のデータを削除します。よろしいですか？')) return;
+
+  var custom = LS.get('customData') || [];
+  custom = custom.filter(function(c){ return c.id !== roundId; });
+  LS.set('customData', custom);
+
+  var corrections = LS.get('dataCorrections') || {};
+  if (corrections[roundId]) {
+    delete corrections[roundId];
+    LS.set('dataCorrections', corrections);
+  }
+
+  var expKey = 'exp_';
+  var expKeys = LS.keys().filter(function(k){ return k.startsWith(expKey); });
+  for (var i = 0; i < expKeys.length; i++) {
+    var saved = LS.get(expKeys[i]);
+    if (saved && saved.round === roundId) LS.remove(expKeys[i]);
+  }
+
+  afterDataChange(roundId, '削除');
+}
+
+function afterDataChange(roundId, action) {
+  updateWeights();
+  updateSumFilter();
+  invalidateExpCache();
+  _analysisCache.pairCorr = null;
+  _analysisCache.entropyRange = null;
+  _analysisCache.periodicities = null;
+  _scoringContext = null;
+  _scoringContextLen = -1;
+
+  showIntegrityWarning();
+  renderIntegrityCheck();
+  renderDataCorrection();
+
+  var el = document.getElementById('edit-round-area');
+  if (el) {
+    el.innerHTML = '<div style="padding:8px;">' +
+      '<p style="color:#4CAF50;">✅ 第' + roundId + '回のデータを' + action + 'しました</p>' +
+      '<p style="color:#4CAF50;">✅ 統計・検証結果を再計算しました（' + getAllData().length + '件）</p>' +
+      '</div>';
+  }
 }
 
 // ============================================================
@@ -5315,7 +5491,7 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.2' });
+    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.3' });
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -5450,7 +5626,7 @@ async function generate50PatternsSilent() {
     }
   }
 
-  LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.2' });
+  LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.3' });
 }
 
 function displayExperimentalResults(results, dateStr) {
@@ -5614,7 +5790,7 @@ function renderExperimental() {
   }
 
   var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.version !== 'v9.2') {
+  if (saved && saved.version !== 'v9.3') {
     LS.remove('exp_' + dateStr);
   }
 
