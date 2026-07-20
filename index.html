@@ -2,209 +2,214 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#f59e0b">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="ロト6の統計分析に基づく予想番号自動生成アプリ">
-  <title>ロト6予測ラボ</title>
-  <link rel="manifest" href="manifest.json">
-  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>太陽とひまわり訪問看護 | 生野区の訪問看護ステーション（大阪市）</title>
+  <meta name="description" content="大阪市生野区の訪問看護ステーション「太陽とひまわり訪問看護」。住み慣れたご自宅で安心の看護を。大阪市全般に対応、現在利用者様を募集中です。訪問看護のご相談はお気軽にお電話ください。">
+  <meta name="keywords" content="訪問看護 生野区,大阪市 訪問看護,在宅看護,太陽とひまわり訪問看護">
+
+  <!-- OGP -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="太陽とひまわり訪問看護 | 生野区の訪問看護ステーション（大阪市）">
+  <meta property="og:description" content="住み慣れたご自宅で、安心の看護を。大阪市生野区の訪問看護ステーション。大阪市全般に対応、利用者様募集中。">
+  <meta property="og:site_name" content="太陽とひまわり訪問看護">
+  <meta property="og:locale" content="ja_JP">
+  <!-- ※ここにOGP用画像を設定してください（推奨サイズ:1200x630px） -->
+  <meta property="og:image" content="https://placehold.co/1200x630/FFC93C/333333?text=%E5%A4%AA%E9%99%BD%E3%81%A8%E3%81%B2%E3%81%BE%E3%82%8F%E3%82%8A%E8%A8%AA%E5%95%8F%E7%9C%8B%E8%AD%B7">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <!-- Google Fonts: Noto Sans JP -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
-</head>
-<body data-theme="dark">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 
-  <!-- Header -->
-  <header class="app-header">
-    <h1 class="app-title">🎯 ロト6 予測ラボ</h1>
-    <div id="nextDrawInfo" class="next-draw-info"></div>
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- 構造化データ: LocalBusiness -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "MedicalBusiness",
+    "name": "太陽とひまわり訪問看護",
+    "description": "大阪市生野区の訪問看護ステーション。住み慣れたご自宅で安心の看護を提供します。",
+    "telephone": "06-6641-0661",
+    "address": {
+      "@type": "PostalAddress",
+      "postalCode": "544-0002",
+      "addressRegion": "大阪府",
+      "addressLocality": "大阪市生野区",
+      "streetAddress": "小路東5-11-1",
+      "addressCountry": "JP"
+    },
+    "areaServed": "大阪市",
+    "url": "https://example.com/"
+  }
+  </script>
+</head>
+<body>
+
+  <!-- ========== 共通ヘッダー ========== -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a href="index.html" class="site-logo">
+        <span class="sun-icon">🌻</span>
+        <span>太陽とひまわり訪問看護</span>
+      </a>
+      <a href="tel:0666410661" class="header-tel">
+        <span>📞</span><span>06-6641-0661</span>
+      </a>
+    </div>
+    <nav class="main-nav" aria-label="メインメニュー">
+      <ul class="nav-list">
+        <li><a href="index.html">TOP</a></li>
+        <li><a href="recruit.html">利用者募集</a></li>
+        <li><a href="contact.html">お問い合わせ</a></li>
+      </ul>
+    </nav>
   </header>
 
-  <!-- Main Content Area -->
-  <main class="app-main" id="appMain">
+  <!-- ========== メインビジュアル ========== -->
+  <section class="hero">
+    <!-- ※ここにメインビジュアルの写真（ひまわり畑や笑顔の高齢者と看護師など明るいイメージ）を設定してください（推奨サイズ:1280x600px） -->
+    <img class="hero-image"
+         src="https://placehold.co/1280x600/FFC93C/ffffff?text=%E3%81%B2%E3%81%BE%E3%82%8F%E3%82%8A%E3%81%A8%E5%A4%AA%E9%99%BD%E3%81%AE%E6%98%8E%E3%82%8B%E3%81%84%E3%83%A1%E3%82%A4%E3%83%B3%E3%83%93%E3%82%B8%E3%83%A5%E3%82%A2%E3%83%AB"
+         alt="ひまわりと太陽をイメージした明るいメインビジュアル">
+    <h1 class="hero-catch">住み慣れたご自宅で、<br>安心の看護を</h1>
+    <p class="hero-sub">大阪市生野区の訪問看護ステーション</p>
+    <a href="recruit.html" class="recruit-banner">
+      <span class="pulse"></span>
+      利用者様 募集中
+    </a>
+  </section>
 
-    <!-- 1. 予想画面 -->
-    <section class="tab-content active" id="tabPredict">
-      <div id="predictionsDisplay"></div>
-      <button class="btn-generate" id="btnGenerate">
-        <span class="btn-generate-icon">🎲</span>
-        <span>予想を生成する</span>
-      </button>
-      <p class="disclaimer">⚠️ ロト6は完全にランダムな抽選です。本予想は当選を保証するものではありません。</p>
-    </section>
-
-    <!-- 2. 分析画面 -->
-    <section class="tab-content" id="tabAnalysis">
-      <div class="period-selector" id="periodSelector">
-        <button class="period-btn active" data-period="10">直近10回</button>
-        <button class="period-btn" data-period="20">直近20回</button>
-        <button class="period-btn" data-period="50">直近50回</button>
-        <button class="period-btn" data-period="all">全期間</button>
-      </div>
-      <div id="analysisContent" class="analysis-content"></div>
-    </section>
-
-    <!-- 3. 履歴画面 -->
-    <section class="tab-content" id="tabHistory">
-      <div id="latestDraw" class="latest-draw-card"></div>
-      <div class="history-controls">
-        <input type="text" id="historySearch" class="search-input" placeholder="番号で検索（例: 17）">
-        <button class="btn-secondary" id="btnAddDraw">＋ 結果を追加</button>
-      </div>
-      <div id="historyList" class="history-list"></div>
-      <button class="btn-secondary btn-load-more" id="btnLoadMore">さらに読み込む</button>
-    </section>
-
-    <!-- 4. 予測記録画面 -->
-    <section class="tab-content" id="tabRecords">
-      <div id="recordsSummary" class="records-summary"></div>
-      <div class="records-filters">
-        <select id="recordsFilter" class="filter-select">
-          <option value="all">全件</option>
-          <option value="verified">検証済み</option>
-          <option value="unverified">未検証</option>
-        </select>
-        <select id="recordsSort" class="filter-select">
-          <option value="newest">新しい順</option>
-          <option value="oldest">古い順</option>
-          <option value="bestmatch">一致数順</option>
-        </select>
-      </div>
-      <div id="recordsList" class="records-list"></div>
-    </section>
-
-    <!-- 5. 検証画面 -->
-    <section class="tab-content" id="tabVerify">
-      <div id="latestVerification" class="latest-verification"></div>
-      <button class="btn-primary" id="btnVerify">検証する</button>
-      <div id="verificationStats" class="verification-stats"></div>
-      <div id="learningStatus" class="learning-status"></div>
-      <p class="disclaimer">⚠️ ロト6は完全にランダムな抽選です。本予想は当選を保証するものではありません。</p>
-    </section>
-
-    <!-- 6. 設定画面 -->
-    <section class="tab-content" id="tabSettings">
-      <div class="settings-section">
-        <h2 class="section-title">テーマ</h2>
-        <div class="theme-buttons">
-          <button class="theme-btn" data-theme="dark">ダーク</button>
-          <button class="theme-btn active" data-theme="light">ライト</button>
-          <button class="theme-btn" data-theme="system">システム</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">自動学習</h2>
-        <label class="toggle-label">
-          <span>自動学習を有効にする</span>
-          <input type="checkbox" id="toggleAutoLearn" checked>
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">統合戦略の重み調整</h2>
-        <div id="weightsSliders" class="weights-sliders"></div>
-        <div class="weights-actions">
-          <button class="btn-secondary" id="btnApplyLearned">学習値を適用</button>
-          <button class="btn-secondary" id="btnResetWeights">デフォルトに戻す</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">データ管理</h2>
-        <div class="data-info" id="dataInfo"></div>
-        <div class="data-actions">
-          <button class="btn-secondary" id="btnExport">データをエクスポート</button>
-          <button class="btn-secondary" id="btnImport">データをインポート</button>
-          <input type="file" id="fileImport" accept=".json" style="display:none">
-          <button class="btn-danger" id="btnResetData">データをリセット</button>
-        </div>
-      </div>
-      <div class="settings-section">
-        <h2 class="section-title">アプリ情報</h2>
-        <p>バージョン: 1.0.0</p>
-        <p id="dataRange"></p>
-        <div class="disclaimer-full">
-          <p>⚠️ 免責事項</p>
-          <p>ロト6は完全にランダムな抽選です。過去の統計的傾向が将来の結果を予測する根拠にはなりません。本アプリは統計分析に基づく参考値を生成するもので、当選を保証するものではありません。宝くじの購入は自己責任で行ってください。</p>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- Add Draw Modal -->
-  <div class="modal-overlay" id="addDrawModal">
-    <div class="modal">
-      <div class="modal-header">
-        <h2>抽選結果を追加</h2>
-        <button class="modal-close" id="modalClose">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label>回号</label>
-          <input type="number" id="inputDrawId" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>抽選日</label>
-          <input type="date" id="inputDrawDate" class="form-input">
-        </div>
-        <div class="form-group">
-          <label>本数字（6個選択）</label>
-          <div class="number-grid" id="numberGrid"></div>
-          <div class="selected-nums" id="selectedNums">選択: なし</div>
-        </div>
-        <div class="form-group">
-          <label>ボーナス数字（1個選択）</label>
-          <div class="number-grid bonus-grid" id="bonusGrid"></div>
-          <div class="selected-bonus" id="selectedBonus">選択: なし</div>
-        </div>
-        <div id="formError" class="form-error"></div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn-secondary" id="modalCancel">キャンセル</button>
-        <button class="btn-primary" id="modalSave">保存</button>
+  <!-- ========== 私たちについて ========== -->
+  <section class="section" id="about">
+    <div class="container">
+      <h2 class="section-title">私たちについて</h2>
+      <div class="section-body">
+        <p>
+          訪問看護とは、看護師などがご自宅にお伺いし、病気や障がいを抱える方が
+          住み慣れた場所で安心して療養生活を送れるようお手伝いするサービスです。
+        </p>
+        <p>
+          「太陽とひまわり訪問看護」は、大阪市生野区を拠点に、
+          太陽のようにあたたかく、ひまわりのように前を向いて、
+          利用者様とご家族に寄り添った看護をお届けします。
+          主治医やケアマネジャーと連携しながら、おひとりおひとりに合わせた
+          きめ細やかなケアを行います。
+        </p>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- Tab Bar -->
-  <nav class="tab-bar">
-    <button class="tab-item active" data-tab="tabPredict">
-      <span class="tab-icon">🎯</span>
-      <span class="tab-label">予想</span>
-    </button>
-    <button class="tab-item" data-tab="tabAnalysis">
-      <span class="tab-icon">📊</span>
-      <span class="tab-label">分析</span>
-    </button>
-    <button class="tab-item" data-tab="tabHistory">
-      <span class="tab-icon">📋</span>
-      <span class="tab-label">履歴</span>
-    </button>
-    <button class="tab-item" data-tab="tabRecords">
-      <span class="tab-icon">📝</span>
-      <span class="tab-label">予測記録</span>
-    </button>
-    <button class="tab-item" data-tab="tabVerify">
-      <span class="tab-icon">✅</span>
-      <span class="tab-label">検証</span>
-    </button>
-    <button class="tab-item" data-tab="tabSettings">
-      <span class="tab-icon">⚙️</span>
-      <span class="tab-label">設定</span>
-    </button>
-  </nav>
+  <!-- ========== サービス内容 ========== -->
+  <section class="section alt" id="services">
+    <div class="container">
+      <h2 class="section-title">サービス内容</h2>
+      <p class="section-lead">利用者様の状態に合わせて、幅広いケアを提供します</p>
+      <div class="card-grid">
+        <div class="service-card">
+          <span class="icon">🩺</span>
+          <h3>健康状態の観察</h3>
+          <p>血圧・体温・脈拍などを定期的に確認し、体調の変化を早期に把握します。</p>
+        </div>
+        <div class="service-card">
+          <span class="icon">💉</span>
+          <h3>医療処置</h3>
+          <p>点滴・注射・カテーテル管理・褥瘡(床ずれ)の処置など、主治医の指示に基づき対応します。</p>
+        </div>
+        <div class="service-card">
+          <span class="icon">💊</span>
+          <h3>服薬管理</h3>
+          <p>お薬を正しく飲めているかを確認し、飲み忘れや飲み間違いを防ぎます。</p>
+        </div>
+        <div class="service-card">
+          <span class="icon">🏃</span>
+          <h3>リハビリテーション</h3>
+          <p>身体機能の維持・回復を目指し、ご自宅でできるリハビリを支援します。</p>
+        </div>
+        <div class="service-card">
+          <span class="icon">🌸</span>
+          <h3>ターミナルケア</h3>
+          <p>人生の最終段階を、住み慣れたご自宅で穏やかに過ごせるよう支えます。</p>
+        </div>
+        <div class="service-card">
+          <span class="icon">🤝</span>
+          <h3>ご家族への支援</h3>
+          <p>介護のご相談や不安の軽減など、ご家族の心身の負担にも寄り添います。</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/utils.js"></script>
-  <script src="js/storage.js"></script>
-  <script src="js/analyzer.js"></script>
-  <script src="js/predictor.js"></script>
-  <script src="js/verifier.js"></script>
-  <script src="js/learner.js"></script>
-  <script src="js/charts.js"></script>
-  <script src="js/app.js"></script>
+  <!-- ========== 対応エリア ========== -->
+  <section class="section" id="area">
+    <div class="container">
+      <h2 class="section-title">対応エリア</h2>
+      <div class="area-box">
+        <strong>大阪市全般に対応しています。</strong><br>
+        その他のエリアについては、お気軽にお問い合わせください。
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== アクセス ========== -->
+  <section class="section alt" id="access">
+    <div class="container">
+      <h2 class="section-title">アクセス</h2>
+      <div class="access-info">
+        <dl>
+          <dt>事業所名</dt>
+          <dd>太陽とひまわり訪問看護</dd>
+          <dt>住所</dt>
+          <dd>〒544-0002 大阪府大阪市生野区小路東5-11-1</dd>
+          <dt>電話番号</dt>
+          <dd><a href="tel:0666410661">06-6641-0661</a></dd>
+        </dl>
+      </div>
+      <div class="map-wrap">
+        <iframe
+          title="太陽とひまわり訪問看護 地図"
+          src="https://maps.google.com/maps?q=%E5%A4%A7%E9%98%AA%E5%BA%9C%E5%A4%A7%E9%98%AA%E5%B8%82%E7%94%9F%E9%87%8E%E5%8C%BA%E5%B0%8F%E8%B7%AF%E6%9D%B15-11-1&hl=ja&z=16&output=embed"
+          loading="lazy"
+          referrerpolicy="no-referrer-when-downgrade"
+          allowfullscreen></iframe>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========== お問い合わせ誘導 ========== -->
+  <section class="cta-section">
+    <h2>訪問看護のご相談はお気軽に</h2>
+    <a href="tel:0666410661" class="cta-tel"><span>📞</span>06-6641-0661</a>
+    <p class="cta-note">受付時間や詳しいご相談は、お電話またはお問い合わせページから</p>
+    <a href="contact.html" class="btn btn-white">お問い合わせページはこちら</a>
+  </section>
+
+  <!-- ========== 共通フッター ========== -->
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-info">
+        <h3>🌻 太陽とひまわり訪問看護</h3>
+        <p>〒544-0002 大阪府大阪市生野区小路東5-11-1</p>
+        <p>TEL：<a href="tel:0666410661">06-6641-0661</a></p>
+        <p>対応エリア：大阪市全般（その他エリアはお問い合わせください）</p>
+      </div>
+      <nav class="footer-nav" aria-label="フッターメニュー">
+        <ul>
+          <li><a href="index.html">TOP</a></li>
+          <li><a href="recruit.html">利用者募集</a></li>
+          <li><a href="contact.html">お問い合わせ</a></li>
+        </ul>
+      </nav>
+    </div>
+    <p class="footer-copy">&copy; <span data-year>2026</span> 太陽とひまわり訪問看護 All Rights Reserved.</p>
+  </footer>
+
+  <!-- ========== モバイル固定「電話をかける」ボタン ========== -->
+  <a href="tel:0666410661" class="fixed-call">
+    <span>📞</span> 電話をかける
+  </a>
+
+  <script src="js/script.js"></script>
 </body>
 </html>
