@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!-- ============================================================
-  Loto6 AI Predictor v9.3
-  Created: 2026-03-16 / Updated: 2026-07-16
+  Loto6 AI Predictor v9.4
+  Created: 2026-03-16 / Updated: 2026-07-30
   Description: AI-powered Loto6 prediction app using statistical
   analysis algorithms with 31 major improvements (v4).
   Single HTML file, no server required.
@@ -674,14 +674,14 @@ body {
 
   <div class="card">
     <div class="card-title">ℹ️ アプリ情報</div>
-    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.3</p>
+    <p style="font-size:13px"><strong>Loto6 AI Predictor</strong> v9.4</p>
     <p style="font-size:12px;color:var(--muted);margin-top:8px">
-      搭載アルゴリズム (v9.3) — 当選結果の修正・削除機能:<br>
-      • 任意の回の当選結果を修正・削除する汎用UI<br>
-      • 内蔵データは修正のみ可、ユーザー入力データは削除も可<br>
-      • 修正後の統計・キャッシュ自動再計算連動<br>
-      • v9.2: 事前生成修正 / v9.1: A〜J表記 / v9.0: CO切替<br>
-      • v8.9: 合意検証 / v8.8: 引継ぎ可視化 / v8.7: コアプール
+      搭載アルゴリズム (v9.4) — 予測アーカイブ凍結:<br>
+      • 回別アーカイブで予測を凍結（一度生成した数字は不変）<br>
+      • 結果入力後も検証は生成時の予測と照合（購入数字=検証数字）<br>
+      • 結果入力済みアーカイブはリセット不可（検証根拠を保持）<br>
+      • v9.3: 結果修正・削除 / v9.2: 事前生成 / v9.1: A〜J表記<br>
+      • v9.0: CO切替 / v8.9: 合意検証 / v8.8: 引継ぎ可視化
     </p>
     <p class="disclaimer">
       ※本予測は統計的分析に基づくもので、当選を保証するものではありません。<br>
@@ -4183,6 +4183,8 @@ function init() {
 // ============================================================
 // [v9.2] Experiment Pre-generation & Persistent Cache
 // ============================================================
+// [v9.4] Round-based Prediction Archive (freeze after generation)
+// ============================================================
 var _expGenerating = false;
 var _expGeneratingPromise = null;
 
@@ -4192,18 +4194,31 @@ function getExpDateStr() {
   return td.getFullYear() + '-' + String(td.getMonth()+1).padStart(2,'0') + '-' + String(td.getDate()).padStart(2,'0');
 }
 
+function getArchiveKey(round) { return 'archive_' + round; }
+
+function loadArchive(round) {
+  try {
+    var saved = LS.get(getArchiveKey(round));
+    if (!saved || !saved.results) return null;
+    var total = 0;
+    for (var gk in saved.results) total += saved.results[gk].length;
+    return total >= 50 ? saved : null;
+  } catch(e) { return null; }
+}
+
+function isArchiveVerified(round) {
+  var data = getAllData();
+  for (var i = 0; i < data.length; i++) {
+    if (data[i].id === round) return true;
+  }
+  return false;
+}
+
 function loadExpCache() {
   try {
     var schedule = getDrawSchedule();
     if (!schedule.showPrediction) return null;
-    var dateStr = getExpDateStr();
-    var saved = LS.get('exp_' + dateStr);
-    if (!saved || !saved.results) return null;
-    if (!saved.drawCount) return null;
-    if (saved.drawCount !== getAllData().length) return null;
-    var total = 0;
-    for (var gk in saved.results) total += saved.results[gk].length;
-    return total >= 50 ? saved : null;
+    return loadArchive(schedule.targetRound);
   } catch(e) { return null; }
 }
 
@@ -4234,10 +4249,24 @@ async function pregenerateExperimentSilent() {
 function invalidateExpCache() {
   var schedule = getDrawSchedule();
   if (schedule.showPrediction) {
-    var dateStr = getExpDateStr();
-    LS.remove('exp_' + dateStr);
+    var round = schedule.targetRound;
+    if (!isArchiveVerified(round)) {
+      LS.remove(getArchiveKey(round));
+    }
   }
   scheduleExperimentPregeneration();
+}
+
+function pruneOldArchives() {
+  var data = getAllData();
+  var latestRound = data.length > 0 ? data[data.length - 1].id : 0;
+  var allKeys = LS.keys().filter(function(k) { return k.startsWith('archive_'); });
+  for (var i = 0; i < allKeys.length; i++) {
+    var roundId = parseInt(allKeys[i].replace('archive_', ''));
+    if (!isNaN(roundId) && roundId < latestRound - 20) {
+      LS.remove(allKeys[i]);
+    }
+  }
 }
 
 // --- Item 1: Data Integrity Check ---
@@ -5491,7 +5520,8 @@ async function generate50Patterns() {
 
     displayExperimentalResults(results, dateStr);
 
-    LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.3' });
+    LS.set(getArchiveKey(schedule.targetRound), { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.4' });
+    pruneOldArchives();
 
     if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン生成完了';
     if (resultsEl) resultsEl.style.display = 'block';
@@ -5626,7 +5656,8 @@ async function generate50PatternsSilent() {
     }
   }
 
-  LS.set('exp_' + dateStr, { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.3' });
+  LS.set(getArchiveKey(schedule.targetRound), { date: dateStr, round: schedule.targetRound, results: results, drawCount: data.length, createdAt: new Date().toISOString(), version: 'v9.4' });
+  pruneOldArchives();
 }
 
 function displayExperimentalResults(results, dateStr) {
@@ -5778,20 +5809,15 @@ function renderExperimental() {
     return;
   }
 
-  var cached = loadExpCache();
+  var cached = loadArchive(schedule.targetRound);
   if (cached) {
     var total = 0;
     for (var gk in cached.results) total += cached.results[gk].length;
     displayExperimentalResults(cached.results, dateStr);
-    if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン（キャッシュ済み）';
+    if (statusEl) statusEl.textContent = '✅ 第' + schedule.targetRound + '回（' + dateStr + '）の' + total + 'パターン（凍結済み）';
     if (resultsEl) resultsEl.style.display = 'block';
     renderExpHistory();
     return;
-  }
-
-  var saved = LS.get('exp_' + dateStr);
-  if (saved && saved.version !== 'v9.3') {
-    LS.remove('exp_' + dateStr);
   }
 
   if (_expGenerating && _expGeneratingPromise) {
@@ -5804,12 +5830,21 @@ function renderExperimental() {
 }
 
 function resetExpData() {
-  if (!confirm('保存済みの50パターン予測を全て削除します。よろしいですか？\n\n※メインの5パターン予測や当選履歴は影響を受けません。')) return;
+  if (!confirm('保存済みの50パターン予測を全て削除します。よろしいですか？\n\n※結果入力済みの回のアーカイブは保持されます。')) return;
   var status = document.getElementById('reset-exp-status');
   if (status) status.textContent = '削除中...';
-  var keys = LS.keys().filter(function(k){return k.startsWith('exp_');});
-  for (var i = 0; i < keys.length; i++) LS.remove(keys[i]);
-  if (status) status.innerHTML = '<span style="color:#4CAF50;">✅ ' + keys.length + '件の実験データを削除しました</span>';
+  var deleted = 0;
+  var expKeys = LS.keys().filter(function(k){return k.startsWith('exp_');});
+  for (var i = 0; i < expKeys.length; i++) { LS.remove(expKeys[i]); deleted++; }
+  var archiveKeys = LS.keys().filter(function(k){return k.startsWith('archive_');});
+  for (var j = 0; j < archiveKeys.length; j++) {
+    var roundId = parseInt(archiveKeys[j].replace('archive_', ''));
+    if (!isNaN(roundId) && !isArchiveVerified(roundId)) {
+      LS.remove(archiveKeys[j]);
+      deleted++;
+    }
+  }
+  if (status) status.innerHTML = '<span style="color:#4CAF50;">✅ ' + deleted + '件の実験データを削除しました（結果入力済みアーカイブは保持）</span>';
   scheduleExperimentPregeneration();
 }
 
@@ -5818,13 +5853,20 @@ function renderExpHistory() {
   if (!histDiv) return;
 
   var data = getAllData();
-  var allKeys = LS.keys().filter(function(k){return k.startsWith('exp_');});
+  var archiveKeys = LS.keys().filter(function(k){return k.startsWith('archive_');});
+  var legacyKeys = LS.keys().filter(function(k){return k.startsWith('exp_');});
+  var allKeys = archiveKeys.concat(legacyKeys);
   if (allKeys.length === 0) {
     histDiv.innerHTML = '<p style="color:var(--muted)">まだ実験履歴はありません</p>';
     return;
   }
 
-  allKeys.sort().reverse();
+  allKeys.sort(function(a, b) {
+    var ra = parseInt(a.replace('archive_', '').replace('exp_', ''));
+    var rb = parseInt(b.replace('archive_', '').replace('exp_', ''));
+    if (!isNaN(ra) && !isNaN(rb)) return rb - ra;
+    return b > a ? 1 : -1;
+  });
   var html = '';
   var groupNames = { hot:'🔥ホット頻度', markov:'🔗マルコフ連鎖', ensemble:'🎯アンサンブルAI', stableA:'💰安定型A', stableB:'💎安定型B' };
   var groupKeys = ['hot','markov','ensemble','stableA','stableB'];
@@ -5836,7 +5878,7 @@ function renderExpHistory() {
     var totalPatterns = 0;
     for (var gk in saved.results) totalPatterns += saved.results[gk].length;
 
-    var drawData = data.find(function(d){return d.d === saved.date;});
+    var drawData = saved.round ? data.find(function(d){return d.id === saved.round;}) : data.find(function(d){return d.d === saved.date;});
 
     if (!drawData) {
       html +=
